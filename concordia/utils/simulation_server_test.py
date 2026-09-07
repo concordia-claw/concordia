@@ -148,12 +148,14 @@ class HttpEndpointsTest(absltest.TestCase):
     self.assertFalse(payload['is_running'])
 
   def test_post_play_resumes_and_get_status_reflects_it(self):
+    self.server.set_simulation(_FakeSimulation())
     status, payload = _request(self.base_url + '/play', method='POST')
     self.assertEqual(status, 200)
     self.assertEqual(payload['status'], 'playing')
     self.assertTrue(self.server.step_controller.is_running)
 
   def test_post_pause(self):
+    self.server.set_simulation(_FakeSimulation())
     self.server.step_controller.play()
     status, payload = _request(self.base_url + '/pause', method='POST')
     self.assertEqual(status, 200)
@@ -161,6 +163,7 @@ class HttpEndpointsTest(absltest.TestCase):
     self.assertTrue(self.server.step_controller.is_paused)
 
   def test_get_based_cmd_endpoints_mirror_post_endpoints(self):
+    self.server.set_simulation(_FakeSimulation())
     status, payload = _request(self.base_url + '/cmd/play')
     self.assertEqual(status, 200)
     self.assertEqual(payload['status'], 'playing')

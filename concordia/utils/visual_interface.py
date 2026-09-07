@@ -24,7 +24,6 @@ from typing import Any
 
 from concordia.typing import prefab as prefab_lib
 
-
 # Color schemes for different roles
 _COLORS = {
     prefab_lib.Role.ENTITY: {
@@ -966,6 +965,7 @@ def visualize_config_to_html(
       </div>
       <div class="sim-controls">
         <div class="status-indicator" id="status-indicator"></div>
+        <span id="run-status" role="status">Connecting</span>
         <button id="btn-play" onclick="simPlay()" title="Play">▶</button>
         <button id="btn-pause" onclick="simPause()" title="Pause">⏸</button>
         <button id="btn-step" onclick="simStep()" title="Step one timestep">1▶</button>
@@ -1240,28 +1240,40 @@ def visualize_config_to_html(
     // Simulation control functions
     let isRunning = false;
     let eventSource = null;
+    let controlStatus = null;
+    let statusRevision = -1;
+    let isConnected = false;
+
+    function applyControlStatus(status) {{
+      // HTTP replies may arrive after a newer SSE transition.
+      if (status.revision < statusRevision) return;
+      const wasCompleted = controlStatus && controlStatus.is_completed;
+      statusRevision = status.revision;
+      controlStatus = status;
+      isConnected = true;
+      isRunning = status.is_running;
+      updateStepCounter(status.current_step);
+      updateControlState();
+      if (status.is_completed && !wasCompleted) {{
+        logConsole('✓ Simulation completed', 'success');
+      }}
+    }}
 
     function simPlay() {{
       sendCommand('/cmd/play', function(response) {{
-        logConsole('▶ Simulation playing', 'success');
-        isRunning = true;
-        updateControlState();
+        logConsole('▶ Continuous execution requested', 'success');
       }});
     }}
 
     function simPause() {{
       sendCommand('/cmd/pause', function(response) {{
-        logConsole('⏸ Simulation paused', 'success');
-        isRunning = false;
-        updateControlState();
+        logConsole('⏸ Pause requested (after the current step)', 'success');
       }});
     }}
 
     function simStep() {{
       sendCommand('/cmd/step', function(response) {{
-        logConsole('⏭ Step executed', 'success');
-        isRunning = false;
-        updateControlState();
+        logConsole('⏭ Single step requested', 'success');
       }});
     }}
 
@@ -1271,7 +1283,19 @@ def visualize_config_to_html(
       xhr.onreadystatechange = function() {{
         if (xhr.readyState === 4) {{
           if (xhr.status === 200) {{
-            successCallback(xhr.responseText);
+            try {{
+              const response = JSON.parse(xhr.responseText);
+              if (response.control_status) {{
+                applyControlStatus(response.control_status);
+              }}
+              if (response.status === 'error') {{
+                logConsole(response.message, 'error');
+              }} else {{
+                successCallback(response);
+              }}
+            }} catch (err) {{
+              logConsole('Invalid server response', 'error');
+            }}
           }} else {{
             logConsole('Command failed (status ' + xhr.status + ')', 'error');
           }}
@@ -1301,17 +1325,20 @@ def visualize_config_to_html(
       const btnPause = document.getElementById('btn-pause');
       const btnStep = document.getElementById('btn-step');
 
-      if (isRunning) {{
-        indicator.className = 'status-indicator running';
-        btnPlay.classList.add('active');
-        btnPause.classList.remove('active');
-        btnStep.disabled = true;
-      }} else {{
-        indicator.className = 'status-indicator paused';
-        btnPlay.classList.remove('active');
-        btnPause.classList.add('active');
-        btnStep.disabled = false;
-      }}
+      const state = isConnected && controlStatus
+          ? controlStatus.state : 'disconnected';
+      const labels = {{
+        running: 'Running', paused: 'Paused', completed: 'Completed',
+        stopped: 'Stopped', empty: 'No simulation', disconnected: 'Disconnected'
+      }};
+      document.getElementById('run-status').textContent = labels[state];
+      indicator.className = 'status-indicator ' + state;
+      indicator.title = labels[state];
+      btnPlay.classList.toggle('active', state === 'running');
+      btnPause.classList.toggle('active', state === 'paused');
+      btnPlay.disabled = state !== 'paused';
+      btnPause.disabled = state !== 'running';
+      btnStep.disabled = state !== 'paused';
     }}
 
     function updateStepCounter(step) {{
@@ -1342,14 +1369,10 @@ def visualize_config_to_html(
       eventSource.onmessage = function(event) {{
         const data = JSON.parse(event.data);
 
-        // Handle simulation completion
-        if (data.completion) {{
-          logConsole('✓ Simulation completed', 'success');
-          document.querySelector('.step-counter').textContent = 'COMPLETE';
-          document.querySelector('.step-counter').style.color = '#00ff00';
-          isPlaying = false;
-          return;
+        if (data.control_status) {{
+          applyControlStatus(data.control_status);
         }}
+        if (data.completion) return;
 
         // Handle entity info update (component data from simulation)
         if (data.entity_info) {{
@@ -1377,6 +1400,7 @@ def visualize_config_to_html(
           return;
         }}
 
+        if (typeof data.step !== 'number') return;
         updateStepCounter(data.step);
         logConsole(`Step ${{data.step}}`, 'info');
 
@@ -1406,6 +1430,8 @@ def visualize_config_to_html(
       }};
 
       eventSource.onerror = function(err) {{
+        isConnected = false;
+        updateControlState();
         console.log('SSE connection error, reconnecting...');
       }};
     }}
@@ -1434,6 +1460,7 @@ def visualize_config_to_html(
           return r.json();
         }})
         .then(data => {{
+          applyControlStatus(data);
           logConsole('Connected to simulation server', 'success');
         }})
         .catch(err => {{

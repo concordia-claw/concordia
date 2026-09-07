@@ -66,6 +66,8 @@ class SimulationServer:
     self._current_step_data: dict[str, Any] = {}
     self._cached_entity_info: dict[str, Any] | None = None
     self._simulation: Any = None
+    self._completed = False
+    self._status_revision = 0
     self._server: socketserver.TCPServer | None = None
     self._server_thread: threading.Thread | None = None
     print(f'[SERVER INIT] SimulationServer initialized on port {port}')
@@ -131,7 +133,7 @@ class SimulationServer:
     self._html_content = html_content
 
   def set_simulation(self, simulation: Any) -> None:
-    """Set the simulation instance for dynamic state editing.
+    """Bind the simulation instance for run controls and dynamic state editing.
 
     This must be called after the Simulation object is created so that
     the server can forward edit requests to it.
@@ -139,12 +141,90 @@ class SimulationServer:
     Args:
       simulation: The Simulation instance.
     """
-    self._simulation = simulation
+    with self._server_sent_events_lock:
+      self._simulation = simulation
+      self._status_revision += 1
+      self._broadcast_locked(self._status_event_locked())
 
   @property
   def simulation(self) -> Any:
     """Get the simulation instance."""
     return self._simulation
+
+  def _status_locked(self) -> dict[str, Any]:
+    """Build a status snapshot while holding the SSE lock."""
+    running = self._step_controller.is_running
+    if self._completed:
+      state = 'completed'
+    elif self._step_controller.should_stop():
+      state = 'stopped'
+    elif self._simulation is None:
+      state = 'empty'
+    else:
+      state = 'running' if running else 'paused'
+    return {
+        'state': state,
+        'is_running': state == 'running',
+        'is_paused': not running,
+        'is_completed': self._completed,
+        'current_step': self._current_step_data.get('step', 0),
+        'revision': self._status_revision,
+    }
+
+  def get_status(self) -> dict[str, Any]:
+    """Return authoritative controls, completion and last observed step.
+
+    Bind a simulation with set_simulation() before accepting run commands.
+    A step command requests permission; only broadcast_step() updates the
+    observed counter. Call broadcast_completion() when the run finishes.
+    """
+    with self._server_sent_events_lock:
+      return self._status_locked()
+
+  def _status_event_locked(self) -> dict[str, Any]:
+    event: dict[str, Any] = {'control_status': self._status_locked()}
+    if self._completed:
+      event.update(completion=True, message='Simulation completed!')
+    return event
+
+  def _broadcast_locked(self, data: dict[str, Any]) -> None:
+    message = f'data: {json.dumps(data)}\n\n'
+    for client in list(self._server_sent_events_queues):
+      try:
+        client.put_nowait(message)
+      except queue.Full:
+        self._server_sent_events_queues.remove(client)
+
+  def execute_command(self, command: str) -> dict[str, Any]:
+    """Apply a run-control command and publish its authoritative result."""
+    actions = {
+        'play': (self._step_controller.play, 'playing'),
+        'pause': (self._step_controller.pause, 'paused'),
+        'step': (self._step_controller.step, 'stepping'),
+        'stop': (self._step_controller.stop, 'stopped'),
+    }
+    if command not in actions:
+      raise ValueError(f'Unknown command: {command}')
+    with self._server_sent_events_lock:
+      status = self._status_locked()
+      if status['state'] in ('empty', 'completed', 'stopped'):
+        return {
+            'status': 'error',
+            'message': f"Cannot {command}: simulation is {status['state']}.",
+            'control_status': status,
+        }
+      if command == 'step' and status['is_running']:
+        return {
+            'status': 'error',
+            'message': 'Pause before requesting a single step.',
+            'control_status': status,
+        }
+      action, result = actions[command]
+      action()
+      self._status_revision += 1
+      event = self._status_event_locked()
+      self._broadcast_locked(event)
+      return {'status': result, **event}
 
   def broadcast_step(self, step_data: step_controller_lib.StepData) -> None:
     """Broadcast step data to all connected Server-Sent Events clients.
@@ -152,7 +232,7 @@ class SimulationServer:
     Args:
       step_data: The step data to broadcast.
     """
-    self._current_step_data = {
+    current_step_data = {
         'step': step_data.step,
         'acting_entity': step_data.acting_entity,
         'action': step_data.action,
@@ -160,30 +240,21 @@ class SimulationServer:
         'entity_logs': step_data.entity_logs,
         'game_master': step_data.game_master,
     }
-    message = f'data: {json.dumps(self._current_step_data)}\n\n'
     with self._server_sent_events_lock:
-      dead_queues = []
-      for q in self._server_sent_events_queues:
-        try:
-          q.put_nowait(message)
-        except queue.Full:
-          dead_queues.append(q)
-      for q in dead_queues:
-        self._server_sent_events_queues.remove(q)
+      self._current_step_data = current_step_data
+      self._status_revision += 1
+      self._broadcast_locked({
+          **current_step_data,
+          'control_status': self._status_locked(),
+      })
 
   def broadcast_completion(self) -> None:
-    """Broadcast simulation completion to all connected SSE clients."""
-    completion_data = {
-        'completion': True,
-        'message': 'Simulation completed!',
-    }
-    message = f'data: {json.dumps(completion_data)}\n\n'
+    """Retain completion for status/reconnect and notify connected clients."""
     with self._server_sent_events_lock:
-      for q in self._server_sent_events_queues:
-        try:
-          q.put_nowait(message)
-        except queue.Full:
-          pass
+      self._completed = True
+      self._step_controller.pause()
+      self._status_revision += 1
+      self._broadcast_locked(self._status_event_locked())
 
   def broadcast_entity_info(self, checkpoint_data: dict[str, Any]) -> None:
     """Broadcast entity component info to all connected SSE clients.
@@ -208,6 +279,21 @@ class SimulationServer:
         except queue.Full:
           pass
 
+  def subscribe_to_events(self) -> queue.Queue[str]:
+    """Subscribe with an atomic retained snapshot, including completion."""
+    client: queue.Queue[str] = queue.Queue(maxsize=100)
+    with self._server_sent_events_lock:
+      self._server_sent_events_queues.append(client)
+      initial_events = []
+      if self._current_step_data:
+        initial_events.append(self._current_step_data)
+      if self._cached_entity_info:
+        initial_events.append(self._cached_entity_info)
+      initial_events.append(self._status_event_locked())
+      for event in initial_events:
+        client.put_nowait(f'data: {json.dumps(event)}\n\n')
+    return client
+
   def _create_handler(self):
     """Create a request handler class with access to server state."""
     server = self
@@ -230,51 +316,16 @@ class SimulationServer:
           self._serve_server_sent_events()
         elif self.path == '/status':
           self._serve_status()
-        # GET-based command endpoints for testing
-        elif self.path == '/cmd/step':
-          print('[SERVER] GET /cmd/step - calling step()')
-          sys.stdout.flush()
-          server.step_controller.step()
-          self._send_json({'status': 'stepping', 'method': 'GET'})
-        elif self.path == '/cmd/play':
-          print('[SERVER] GET /cmd/play - calling play()')
-          sys.stdout.flush()
-          server.step_controller.play()
-          self._send_json({'status': 'playing', 'method': 'GET'})
-        elif self.path == '/cmd/pause':
-          print('[SERVER] GET /cmd/pause - calling pause()')
-          sys.stdout.flush()
-          server.step_controller.pause()
-          self._send_json({'status': 'paused', 'method': 'GET'})
+        elif self.path in ('/cmd/step', '/cmd/play', '/cmd/pause'):
+          result = server.execute_command(self.path.rsplit('/', 1)[1])
+          self._send_json({**result, 'method': 'GET'})
         else:
           self.send_error(404)
 
       def do_POST(self) -> None:  # pylint: disable=invalid-name
         """Handle POST requests for simulation control commands."""
-        if self.path == '/play':
-          print('[SERVER] Calling step_controller.play()...')
-          server.step_controller.play()
-          print('[SERVER] play() completed, sending response...')
-          self._send_json({'status': 'playing'})
-          print('[SERVER] Response sent for /play')
-        elif self.path == '/pause':
-          print('[SERVER] Calling step_controller.pause()...')
-          server.step_controller.pause()
-          print('[SERVER] pause() completed, sending response...')
-          self._send_json({'status': 'paused'})
-          print('[SERVER] Response sent for /pause')
-        elif self.path == '/step':
-          print('[SERVER] Calling step_controller.step()...')
-          server.step_controller.step()
-          print('[SERVER] step() completed, sending response...')
-          self._send_json({'status': 'stepping'})
-          print('[SERVER] Response sent for /step')
-        elif self.path == '/stop':
-          print('[SERVER] Calling step_controller.stop()...')
-          server.step_controller.stop()
-          print('[SERVER] stop() completed, sending response...')
-          self._send_json({'status': 'stopped'})
-          print('[SERVER] Response sent for /stop')
+        if self.path in ('/play', '/pause', '/step', '/stop'):
+          self._send_json(server.execute_command(self.path[1:]))
         elif self.path == '/cmd/set_component_state':
           self._handle_set_component_state()
         else:
@@ -290,12 +341,7 @@ class SimulationServer:
 
       def _serve_status(self) -> None:
         """Serve current simulation status."""
-        status = {
-            'is_running': server.step_controller.is_running,
-            'is_paused': server.step_controller.is_paused,
-            'current_step': server.current_step_data.get('step', 0),
-        }
-        self._send_json(status)
+        self._send_json(server.get_status())
 
       def _serve_server_sent_events(self) -> None:
         """Serve Server-Sent Events stream."""
@@ -306,22 +352,8 @@ class SimulationServer:
         self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
 
-        server_sent_events_queue: queue.Queue[str] = queue.Queue(maxsize=100)
-        with server.server_sent_events_lock:
-          server.server_sent_events_queues.append(server_sent_events_queue)
-
-        if server.current_step_data:
-          initial = f'data: {json.dumps(server.current_step_data)}\n\n'
-          self.wfile.write(initial.encode('utf-8'))
-          self.wfile.flush()
-
-        # Send cached entity info if available
-        if server.cached_entity_info:
-          entity_info_msg = (
-              f'data: {json.dumps(server.cached_entity_info)}\n\n'
-          )
-          self.wfile.write(entity_info_msg.encode('utf-8'))
-          self.wfile.flush()
+        # Retained state and subsequent broadcasts share the same ordered queue.
+        server_sent_events_queue = server.subscribe_to_events()
 
         try:
           while True:
