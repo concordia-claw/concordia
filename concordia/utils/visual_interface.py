@@ -24,7 +24,6 @@ from typing import Any
 
 from concordia.typing import prefab as prefab_lib
 
-
 # Color schemes for different roles
 _COLORS = {
     prefab_lib.Role.ENTITY: {
@@ -337,25 +336,33 @@ def visualize_config(
   Returns:
     Tuple of (SVG string, entity data dict for JavaScript).
   """
-  # Group instances by role
-  entities = [i for i in config.instances if i.role == prefab_lib.Role.ENTITY]
+  # Preserve config indices so grouped cards match _build_entity_data IDs.
+  indexed_instances = list(enumerate(config.instances))
+  entities = [
+      (index, instance)
+      for index, instance in indexed_instances
+      if instance.role == prefab_lib.Role.ENTITY
+  ]
   game_masters = [
-      i for i in config.instances if i.role == prefab_lib.Role.GAME_MASTER
+      (index, instance)
+      for index, instance in indexed_instances
+      if instance.role == prefab_lib.Role.GAME_MASTER
   ]
   initializers = [
-      i for i in config.instances if i.role == prefab_lib.Role.INITIALIZER
+      (index, instance)
+      for index, instance in indexed_instances
+      if instance.role == prefab_lib.Role.INITIALIZER
   ]
 
   svg_parts = []
   current_y = _PADDING
-  entity_id_counter = [0]  # Use list for nonlocal mutation
 
   # Calculate grid width
   max_cols = 4
   grid_width = max_cols * (_ENTITY_WIDTH + _GRID_GAP) - _GRID_GAP + 2 * _PADDING
 
   def render_group(
-      instances: list[prefab_lib.InstanceConfig],
+      instances: list[tuple[int, prefab_lib.InstanceConfig]],
       title: str,
       start_y: int,
   ) -> int:
@@ -381,10 +388,9 @@ def visualize_config(
     row_y = start_y
     row_max_height = 0
 
-    for instance in instances:
+    for index, instance in instances:
       x = _PADDING + col * (_ENTITY_WIDTH + _GRID_GAP)
-      entity_id = f"entity_{entity_id_counter[0]}"
-      entity_id_counter[0] += 1
+      entity_id = f"entity_{index}"
       entity_svg, height = _render_entity_svg(instance, x, row_y, entity_id)
       svg_parts.append(entity_svg)
       row_max_height = max(row_max_height, height)
