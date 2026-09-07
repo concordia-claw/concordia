@@ -24,7 +24,6 @@ from typing import Any
 
 from concordia.typing import prefab as prefab_lib
 
-
 # Color schemes for different roles
 _COLORS = {
     prefab_lib.Role.ENTITY: {
@@ -442,7 +441,8 @@ def visualize_config_to_html(
     Complete HTML page as a string.
   """
   svg, entity_data = visualize_config(config, checkpoint_data)
-  entity_data_json = json.dumps(entity_data)
+  # Keep literal closing script tags in component state inside the JSON data.
+  entity_data_json = json.dumps(entity_data).replace("<", "\\u003c")
 
   html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -706,6 +706,9 @@ def visualize_config_to_html(
       width: 100%;
       box-sizing: border-box;
       margin-top: 2px;
+      min-width: 0;
+      resize: vertical;
+      line-height: 1.4;
     }}
 
     .dynamic-input:focus {{
@@ -1056,6 +1059,7 @@ def visualize_config_to_html(
 
       // Build component sections
       let html = '';
+      const dynamicValues = [];
 
       // Component Info section (if available from checkpoint)
       if (data.component_info) {{
@@ -1105,7 +1109,8 @@ def visualize_config_to_html(
                   html += '</div>';
                   html += '<div class="dynamic-row-editor">';
                   const valStr = typeof stateVal === 'object' ? JSON.stringify(stateVal) : String(stateVal);
-                  html += `<input class="dynamic-input" id="${{inputId}}" type="text" value="${{escapeHtml(valStr)}}" />`;
+                  html += `<textarea class="dynamic-input" id="${{inputId}}" rows="3"></textarea>`;
+                  dynamicValues.push({{id: inputId, value: valStr}});
                   html += `<button class="dynamic-save-btn" data-entity="${{escapeHtml(data.name)}}" data-component="${{escapeHtml(key)}}" data-state-key="${{escapeHtml(stateKey)}}" data-input-id="${{inputId}}">Save</button>`;
                   html += '</div>';
                   html += '</div>';
@@ -1157,6 +1162,12 @@ def visualize_config_to_html(
       html += '</div></div>';
 
       content.innerHTML = html;
+
+      // Assign prose as a DOM value: quotes and markup stay literal, and
+      // textarea controls preserve multiline text through Save and SSE refresh.
+      dynamicValues.forEach(({{id, value}}) => {{
+        document.getElementById(id).value = value;
+      }});
 
       content.querySelectorAll('.dynamic-save-btn').forEach(btn => {{
         btn.addEventListener('click', function() {{
