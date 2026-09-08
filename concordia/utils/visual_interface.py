@@ -23,7 +23,7 @@ import json
 from typing import Any
 
 from concordia.typing import prefab as prefab_lib
-
+from concordia.utils import project_view
 
 # Color schemes for different roles
 _COLORS = {
@@ -426,6 +426,8 @@ def visualize_config_to_html(
     config: prefab_lib.Config,
     title: str = "Simulation Configuration",
     checkpoint_data: dict[str, Any] | None = None,
+    *,
+    project_mode: bool = False,
 ) -> str:
   """Generate a complete HTML page with the SVG visualization.
 
@@ -437,12 +439,19 @@ def visualize_config_to_html(
     title: Title for the HTML page.
     checkpoint_data: Optional checkpoint data from simulation to show component
       class names in the Inspector.
+    project_mode: Show the configured server initial-project controls instead of
+      runtime controls. Requires SimulationServer.configure_project().
 
   Returns:
     Complete HTML page as a string.
   """
   svg, entity_data = visualize_config(config, checkpoint_data)
-  entity_data_json = json.dumps(entity_data)
+  # Initial-project controls fetch data as JSON; never embed authored text.
+  entity_data_json = (
+      "{}" if project_mode else json.dumps(entity_data).replace("<", "\\u003c")
+  )
+  project_style = project_view.STYLE if project_mode else ""
+  project_script = project_view.SCRIPT if project_mode else ""
 
   html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -944,6 +953,7 @@ def visualize_config_to_html(
       text-overflow: ellipsis;
     }}
   </style>
+{project_style}
 </head>
 <body>
   <div class="layout">
@@ -1187,7 +1197,7 @@ def visualize_config_to_html(
     function escapeHtml(text) {{
       const div = document.createElement('div');
       div.textContent = text;
-      return div.innerHTML;
+      return div.innerHTML.replace(/"/g, '&quot;');
     }}
 
     function saveComponentState(entityName, componentName, stateKey, inputId) {{
@@ -1423,7 +1433,8 @@ def visualize_config_to_html(
       }}
     }}
 
-    // Initialize
+    // Initialize runtime controls only in the runtime view.
+    if (!{str(project_mode).lower()}) {{
     updateControlState();
 
     // Try to connect to SSE (will work when served from simulation server)
@@ -1444,7 +1455,9 @@ def visualize_config_to_html(
     }} else {{
       logConsole('Running from file:// - server features disabled', 'warning');
     }}
+    }}
   </script>
+  {project_script}
 </body>
 </html>"""
 
