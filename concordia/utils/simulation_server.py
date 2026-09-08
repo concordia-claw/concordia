@@ -18,6 +18,8 @@ This module provides a server that serves the visualization UI and broadcasts
 simulation updates via Server-Sent Events (SSE).
 """
 
+from collections.abc import Callable
+import copy
 import http.server
 import json
 import queue
@@ -30,6 +32,9 @@ from urllib.parse import urlsplit
 from concordia.environment import step_controller as step_controller_lib
 from concordia.utils import browser_sessions as browser_sessions_lib
 from concordia.utils import operation_service as operation_service_lib
+from concordia.typing import prefab as prefab_lib
+from concordia.utils import project_config
+from concordia.utils import visual_interface
 
 
 class SimulationServer:
@@ -104,6 +109,14 @@ class SimulationServer:
     self._public_origin = public_origin
     self._operation_service = operation_service
     self._audience = audience
+    self._project_lock = threading.RLock()
+    self._project_registry: project_config.Registry | None = None
+    self._project_document: dict[str, Any] | None = None
+    self._project_revision = 0
+    self._project_run: dict[str, Any] = {'status': 'not_started'}
+    self._project_runner: Callable[[prefab_lib.Config], None] | None = None
+    self._project_thread: threading.Thread | None = None
+    self._runtime_html = ''
     self._port = port
     self._html_content = html_content
     self._host = host
@@ -348,6 +361,125 @@ class SimulationServer:
         client.put_nowait(f'data: {json.dumps(event)}\n\n')
     return client
 
+  def configure_project(
+      self,
+      registry: project_config.Registry,
+      document: dict[str, Any],
+      run: Callable[[prefab_lib.Config], None],
+  ) -> None:
+    """Enable initial-project authoring with a trusted, caller-owned runner.
+
+    The runner receives a fresh Config and is invoked only by explicit Run.
+    It should bind the new standard Simulation to this server, provide its
+    runtime visualization, and call Simulation.play with the existing controller
+    and broadcast callbacks. Saving a draft never changes the bound simulation.
+    """
+    normalized = registry.normalize(document)
+    with self._project_lock:
+      if self._project_registry is not None:
+        raise RuntimeError('Project authoring is already configured.')
+      if self._simulation is not None:
+        raise RuntimeError(
+            'Configure the initial project before binding runtime state.'
+        )
+      self._project_registry = registry
+      self._project_document = normalized
+      self._project_runner = run
+      self.set_html_content(
+          visual_interface.visualize_config_to_html(
+              registry.to_config(normalized),
+              project_mode=True,
+              title='Initial project',
+          )
+      )
+
+  def get_project(self) -> dict[str, Any]:
+    """Get an owned initial draft and its separate run status."""
+    with self._project_lock:
+      if self._project_document is None:
+        raise ValueError('Initial-project authoring is not configured.')
+      return copy.deepcopy({
+          'document': self._project_document,
+          'revision': self._project_revision,
+          'run': self._project_run,
+      })
+
+  def replace_project(self, text: str, revision: int) -> dict[str, Any]:
+    """Atomically replace a valid draft; reject stale or active-run edits."""
+    with self._project_lock:
+      if self._project_registry is None:
+        raise ValueError('Initial-project authoring is not configured.')
+      self._check_project_revision(revision)
+      normalized = self._project_registry.loads(text)
+      html = visual_interface.visualize_config_to_html(
+          self._project_registry.to_config(normalized),
+          title='Initial project',
+          project_mode=True,
+      )
+      self._project_document = normalized
+      self.set_html_content(html)
+      self._project_revision += 1
+      return self.get_project()
+
+  def _check_project_revision(self, revision: int) -> None:
+    if self._project_run['status'] == 'active':
+      raise ValueError(
+          'A run is active (including paused). Finish it before replacing or'
+          ' running a project.'
+      )
+    if (
+        not isinstance(revision, int)
+        or isinstance(revision, bool)
+        or revision != self._project_revision
+    ):
+      raise ValueError(
+          'The draft changed in another tab. Reopen the current draft before'
+          ' saving.'
+      )
+
+  def run_project(self, revision: int) -> dict[str, Any]:
+    """Start the saved revision, rejecting concurrent runs."""
+    with self._project_lock:
+      if self._project_registry is None or self._project_runner is None:
+        raise ValueError('Initial-project authoring is not configured.')
+      self._check_project_revision(revision)
+      config = self._project_registry.to_config(self._project_document)
+      self._project_run = {'status': 'active', 'revision': revision}
+      self._step_controller = step_controller_lib.StepController(
+          start_paused=False
+      )
+      self._current_step_data = {}
+      self._cached_entity_info = None
+      self._runtime_html = ''
+      self._project_thread = threading.Thread(
+          target=self._run_project, args=(config,), daemon=True
+      )
+      self._project_thread.start()
+      return self.get_project()
+
+  def _run_project(self, config: prefab_lib.Config) -> None:
+    outcome = {'status': 'completed'}
+    try:
+      assert self._project_runner is not None
+      self._project_runner(config)
+    except Exception as error:  # pylint: disable=broad-exception-caught
+      # Retain a failed draft for correction/export, not a lost thread.
+      outcome = {'status': 'failed', 'message': str(error)}
+    finally:
+      with self._project_lock:
+        # Publish completion only after this run's controller is finalized.
+        self._step_controller.pause()
+        self._project_run.update(outcome)
+
+  @property
+  def runtime_html_content(self) -> str:
+    """Get the bound runtime visualization, separate from the initial draft."""
+    return self._runtime_html
+
+  def set_runtime_html_content(self, html_content: str) -> None:
+    """Set the existing runtime inspector, separate from the initial draft."""
+    self._runtime_html = html_content
+
   def _create_handler(self):
     """Create a request handler class with access to server state."""
     server = self
@@ -404,7 +536,17 @@ class SimulationServer:
             return
           self._handle_operation_get()
           return
-        if self.path == '/':
+        if self.path == '/project':
+          try:
+            self._send_json(server.get_project())
+          except ValueError as error:
+            self._send_json({'error': str(error)}, 400)
+        elif self.path == '/runtime':
+          if server.runtime_html_content:
+            self._serve_html(server.runtime_html_content)
+          else:
+            self.send_error(404, 'Run the initial project first.')
+        elif self.path == '/':
           self._serve_html()
         elif self.path == '/events':
           self._serve_server_sent_events()
@@ -441,7 +583,9 @@ class SimulationServer:
             return
           self._handle_operation_post()
           return
-        if self.path in ('/play', '/pause', '/step', '/stop'):
+        if self.path in ('/project', '/project/run'):
+          self._handle_project()
+        elif self.path in ('/play', '/pause', '/step', '/stop'):
           self._send_json(server.execute_command(self.path[1:]))
         elif self.path == '/cmd/set_component_state':
           self._handle_set_component_state()
@@ -547,12 +691,16 @@ class SimulationServer:
               400,
           )
 
-      def _serve_html(self) -> None:
+      def _serve_html(self, html_content: str | None = None) -> None:
         """Serve the visualization HTML."""
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(server.html_content.encode('utf-8'))
+        self.wfile.write(
+            (
+                server.html_content if html_content is None else html_content
+            ).encode('utf-8')
+        )
 
       def _serve_status(self) -> None:
         """Serve current simulation status."""
@@ -599,6 +747,28 @@ class SimulationServer:
             with server.server_sent_events_lock:
               if client in server.server_sent_events_queues:
                 server.server_sent_events_queues.remove(client)
+
+      def _handle_project(self) -> None:
+        """Initial-project requests do not use the runtime-state endpoint."""
+        try:
+          length = int(self.headers.get('Content-Length', 0))
+          if not 0 < length <= 1024 * 1024:
+            self.close_connection = True
+            raise ValueError(
+                'Project request must be between 1 byte and 1 MiB.'
+            )
+          request = json.loads(self.rfile.read(length).decode('utf-8'))
+          if self.path == '/project/run':
+            result = server.run_project(request['revision'])
+          else:
+            result = server.replace_project(
+                request['text'], request['revision']
+            )
+          self._send_json(result)
+        except (
+            KeyError, ValueError, TypeError, UnicodeError, RecursionError
+        ) as error:
+          self._send_json({'error': str(error)}, 400)
 
       def _handle_set_component_state(self) -> None:
         """Handle POST /cmd/set_component_state for dynamic editing."""
