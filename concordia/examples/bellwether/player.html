@@ -56,6 +56,11 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <h2>The night’s account</h2><div id="journal" aria-live="polite"></div>
 <details id="agreements" hidden><summary>Commitments and institutions</summary><div id="commitments"></div><div id="institutions"></div></details>
 <details><summary>Your available context</summary><pre id="context"></pre></details>
+<section id="public-account" hidden><h2>Keep a public account</h2>
+<p>Save public events and material consequences. Private messages are excluded. Public speech may still identify people. This is not a saved game.</p>
+<button id="export-html" type="button">Download readable account</button>
+<button id="export-json" type="button">Download public JSON</button>
+<p id="export-status" role="status"></p></section>
 <section id="composer"><h2 id="prompt">Waiting to begin</h2><p id="role-wait" role="status"></p><p id="turn-note" class="subtle"></p><label id="decision-label" for="decision" hidden>Your decision</label><select id="decision" hidden></select><div id="choices"></div>
 <form id="action-form"><label for="action">What do you do or say?</label><textarea id="action" placeholder="Choose a suggestion, or write your own words…"></textarea>
 <p><button type="button" id="wait">Suggest waiting</button> <button id="act" disabled>Send action</button></p></form></section>
@@ -196,6 +201,8 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 
   $('fixture').hidden=!state.fixture;$('watch').textContent=night?night.watch+' · '+night.remaining+' choices remain':'Dusk · one-turn fixture';
   $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'The account is complete':'Connected · '+(human.pending?'Your turn':spectator?'Watching public events':night?.next_actor&&night.next_actor!==role?'Waiting for '+night.next_actor:human.status);
+  $('public-account').hidden=!night;
+  $('export-html').disabled=$('export-json').disabled=!connected||exporting;
   $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused'||spectator;$('begin').disabled=!connected||sending||(state.multiplayer&&!state.players_ready);if(state.multiplayer&&!state.players_ready)$('connection').textContent='Waiting for the host to approve both players';
   $('resources').replaceChildren();
   if(night){
@@ -267,6 +274,22 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   }catch(error){$('error').textContent=error.message+' Your draft is kept.'}
   finally{sending=false;render(current)}
  }
+ let exporting=false;
+ async function downloadAccount(format){
+  if(!connected||!current||exporting)return;
+  const owner=identity;exporting=true;render(current);$('export-status').textContent='Preparing public account…';
+  try{
+   const response=await fetch(api('dispatch'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation:'game.public_account',arguments:{format}})});
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error?.message||'Download unavailable.');
+   if(owner!==identity||current.result.lobby||!connected)throw new Error('Connection or role changed; retry when connected.');
+   const artifact=data.result,url=URL.createObjectURL(new Blob([artifact.content],{type:artifact.media_type})),link=document.createElement('a');
+   link.href=url;link.download=artifact.filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+   $('export-status').textContent='Public account downloaded. Your draft and the night are unchanged.';
+  }catch(error){$('export-status').textContent=error.message.replace(/[.!?]$/,'')+'. Your draft is kept.'}
+  finally{exporting=false;if(current)render(current)}
+ }
+ $('export-html').onclick=()=>downloadAccount('html');$('export-json').onclick=()=>downloadAccount('json');
  $('action-form').onsubmit=e=>{e.preventDefault();if(current?.result.human.pending)dispatch('human.respond',{request_id:current.result.human.pending.id,response:current.result.role==='Nell'?JSON.stringify({decision:$('decision').value,speech:$('action').value}):$('action').value})};
  $('begin').onclick=()=>dispatch('game.begin',{});
  const stream=new EventSource(api('events'));

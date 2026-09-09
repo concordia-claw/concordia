@@ -21,6 +21,7 @@ import time
 from concordia.components.game_master import make_observation
 from concordia.examples.bellwether import game
 from concordia.examples.bellwether import game_prefab
+from concordia.examples.bellwether import public_account
 from concordia.examples.bellwether import scenario
 from concordia.examples.bellwether import service
 from concordia.utils import operation_service as ops
@@ -82,6 +83,20 @@ class Game(service.Bellwether):
 
   def _register(self):
     super()._register()
+    self.operations.register(
+        ops.Operation(
+            'game.public_account',
+            'Download public events and accounting only, not a checkpoint.',
+            {'format': ops.Parameter('string', 'json or html', max_length=4)},
+            lambda args: public_account.export(
+                self.world,
+                fixture=self.fixture,
+                phase=self.phase,
+                format_name=args['format'],
+            ),
+            audiences=(*self.player_audiences, 'role:spectator', 'developer'),
+        )
+    )
     self.operations.register(
         ops.Operation(
             'game.begin',

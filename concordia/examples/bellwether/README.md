@@ -148,3 +148,9 @@ branches, experiments, measurement/export and fresh-environment showcase tours.
 The full Bellwether A–H acceptance and six-workflow baseline are not satisfied by
 this slice. Mechanics values are explicit initial fixture configuration only;
 no narrative can be interpreted as a material or consent change.
+
+## Portable public account
+
+Full-night players and approved spectators can download a script-free public
+timeline and JSON accounting without sharing private journals. See
+[PUBLIC-ACCOUNT.md](PUBLIC-ACCOUNT.md) for scope, CLI use and non-replay limits.

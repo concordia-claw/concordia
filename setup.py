@@ -73,6 +73,7 @@ setuptools.setup(
             'VOICE.md',
             'RESEARCHER.md',
             'ENGINES.md',
+            'PUBLIC-ACCOUNT.md',
         ],
         'concordia.examples.astral_canticle': [
             'static/*',
