@@ -90,7 +90,11 @@ class Game(service.Bellwether):
         ops.Operation(
             'game.public_account',
             'Download public events and accounting only, not a checkpoint.',
-            {'format': ops.Parameter('string', 'json or html', max_length=4)},
+            {
+                'format': ops.Parameter(
+                    'string', 'json, html or svg', max_length=4
+                )
+            },
             lambda args: public_account.export(
                 self.world,
                 fixture=self.fixture,

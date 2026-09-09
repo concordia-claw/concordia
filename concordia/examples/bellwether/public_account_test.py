@@ -102,7 +102,7 @@ def test_empty_public_timeline_and_explicit_non_replay_limits(game):
 
 def test_invalid_format_and_scope_fail_without_changes(game):
   before = game.operations.snapshot('developer')
-  with pytest.raises(ops.OperationError, match='json or html'):
+  with pytest.raises(ops.OperationError, match='json, html or svg'):
     call(game, format_name='xml')
   with pytest.raises(ops.OperationError, match='unavailable'):
     call(game, audience='visitor')

@@ -18,6 +18,7 @@ import html
 import json
 
 from concordia.examples.bellwether import game
+from concordia.examples.bellwether import public_figure
 from concordia.utils import operation_service as ops
 
 NOTICE = (
@@ -190,19 +191,23 @@ def export(
     world: game.StormNight, *, fixture: bool, phase: str, format_name: str
 ) -> dict:
   """Return artifact content without transport/session envelope identifiers."""
-  if format_name not in ('json', 'html'):
-    raise ops.OperationError('invalid_format', 'Choose json or html.')
+  if format_name not in ('json', 'html', 'svg'):
+    raise ops.OperationError('invalid_format', 'Choose json, html or svg.')
   account = document(world, fixture=fixture, phase=phase)
   return {
       'filename': 'bellwether-public-account.' + format_name,
       'media_type': (
           'application/json; charset=utf-8'
           if format_name == 'json'
+          else 'image/svg+xml; charset=utf-8'
+          if format_name == 'svg'
           else 'text/html; charset=utf-8'
       ),
       'content': (
           json.dumps(account, ensure_ascii=False, indent=2) + '\n'
           if format_name == 'json'
+          else public_figure.render(account)
+          if format_name == 'svg'
           else render_html(account)
       ),
   }

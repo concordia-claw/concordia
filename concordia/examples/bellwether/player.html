@@ -63,6 +63,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <p>Save public events and material consequences. Private messages are excluded. Public speech may still identify people. This is not a saved game.</p>
 <button id="export-html" type="button">Download readable account</button>
 <button id="export-json" type="button">Download public JSON</button>
+<button id="export-svg" type="button">Download public figure</button>
 <p id="export-status" role="status"></p></section>
 <section id="composer"><h2 id="prompt">Waiting to begin</h2><p id="role-wait" role="status"></p><p id="turn-note" class="subtle"></p><label id="decision-label" for="decision" hidden>Your decision</label><select id="decision" hidden></select><div id="choices"></div>
 <form id="action-form"><label for="action">What do you do or say?</label><textarea id="action" placeholder="Choose a suggestion, or write your own words…"></textarea>
@@ -214,7 +215,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   $('fixture').hidden=!state.fixture;$('watch').textContent=night?night.watch+' · '+night.remaining+' choices remain':'Dusk · one-turn fixture';
   $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'The account is complete':'Connected · '+(human.pending?'Your turn':spectator?'Watching public events':night?.next_actor&&night.next_actor!==role?'Waiting for '+night.next_actor:human.status);
   $('public-account').hidden=!night;
-  $('export-html').disabled=$('export-json').disabled=!connected||exporting;
+  $('export-svg').disabled=$('export-html').disabled=$('export-json').disabled=!connected||exporting;
   $('recipe-note').textContent=state.recipe&&state.recipe.recipe!=='bellwether'?'Teaching case: '+state.recipe.recipe.replaceAll('-',' ')+'. '+state.recipe.fuel_consumed_before_play+' fuel used before play; Used totals include that initial consumption. Fixed Bellwether consent and accounting still apply.':'';
   $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused'||spectator;$('begin').disabled=!connected||sending||(state.multiplayer&&!state.players_ready);if(state.multiplayer&&!state.players_ready)$('connection').textContent='Waiting for the host to approve both players';
   $('resources').replaceChildren();
@@ -359,6 +360,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   }catch(error){$('export-status').textContent=error.message.replace(/[.!?]$/,'')+'. Your draft is kept.'}
   finally{exporting=false;if(current)render(current)}
  }
+ $('export-svg').onclick=()=>downloadAccount('svg');
  $('export-html').onclick=()=>downloadAccount('html');$('export-json').onclick=()=>downloadAccount('json');
  $('action-form').onsubmit=e=>{e.preventDefault();if(current?.result.human.pending)dispatch('human.respond',{request_id:current.result.human.pending.id,response:current.result.role==='Nell'?JSON.stringify({decision:$('decision').value,speech:$('action').value}):$('action').value})};
  $('begin').onclick=()=>dispatch('game.begin',{});

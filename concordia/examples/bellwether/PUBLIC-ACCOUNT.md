@@ -44,7 +44,8 @@ printf '%s\n' '{"operation":"game.public_account","arguments":{"format":"json"}}
 python -c 'import json,pathlib; x=json.loads(pathlib.Path("public-response.json").read_text()); pathlib.Path("bellwether-public-account.json").write_text(x["result"]["content"], encoding="utf-8")'
 ```
 
-Choose `html` instead to obtain the readable artifact. The shared operation's
+Choose `html` instead to obtain the readable artifact, or `svg` for the
+public service figure. The shared operation's
 `result` has `filename`, `media_type` and `content`; save **only content**.
 The ordinary operation envelope contains process references for the attached
 transport, and is not the shareable artifact. No mutation revision or retry key
@@ -71,3 +72,47 @@ validation of real societies. An exported account neither certifies the truth of
 the previous-storm dispute nor makes hosted model output deterministic. Full
 checkpoints, intervention provenance and isolated continuation need separate
 contracts before experimental branch comparison.
+
+
+## A portable public figure
+
+**Download public figure** produces a self-contained SVG through the same
+`game.public_account` operation with `format: "svg"`. It uses the existing
+Matplotlib dependency and the existing public document projection, not private
+logs or screenshots of an authenticated page. No new service, provider upload,
+model call or user-data import is involved.
+
+The figure shows watch-by-facility **Served**, **Unserved** and **Not resolved**
+states in words as well as colors, plus current recorded fuel stocks and spare
+part holders. **Not resolved** is not a prediction; a request or promise does
+not count as supplied service. Used stock remains cumulative, including any
+explicit pre-play consumption. The image is an accounting figure, not a
+geographical map or a model-generated depiction of historical events.
+
+Its SVG title and description provide an accessible text account of every cell
+and stock, with source schema, backend, run status and watch. The same provenance
+is visible on the figure. Public dialogue is deliberately omitted from the
+image—even though it is available in the HTML/JSON timeline. A snapshot marked
+fixture or interrupted must retain that label when shared. Do not crop away
+provenance or treat the figure as empirical warrant for a social conclusion.
+
+SVG has no scripts, forms, external fonts/resources or live service link. Internal
+clip/glyph references and any embedded PNG grid are self-contained. Open it in a
+browser or a compatible image viewer; zoom preserves vector text/axes. Plotting
+work uses owned Figure instances and a renderer lock, without changing unrelated
+pyplot/global settings. Internal IDs are normalized and generation dates omitted
+for repeatable exports from the same state/software/fonts; this does not promise
+byte-identical rendering across plotting-library or font versions.
+
+Real Chromium tests download through the player, compare the existing CLI result,
+open the image offline in narrow portrait/landscape and verify descriptions,
+private-data exclusion, unchanged drafts and no game effects. The screenshot
+captures the SVG element itself: Chromium's full-document capture stalled for
+standalone SVG in this environment, while native element capture and display
+worked. No physical phone, assistive-technology study or played simulation is
+claimed by these checks.
+
+This is **presentation multimodality**, separate from image/audio understanding
+by a model. The inspected installed local chat models report completion/tools
+(and, for Qwen, thinking), not vision/audio input support. This feature neither
+changes Concordia's text model contract nor silently supplies an image to one.
