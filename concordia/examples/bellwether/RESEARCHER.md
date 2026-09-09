@@ -305,3 +305,12 @@ host-approved recipient-only dispute delivery using a component fixture. These
 checks do not invoke Simulation.play or a model; existing full-game execution
 wiring is unchanged. Checkpoint, arbitrary project authoring, experimental and
 physical-device acceptance remain separate.
+
+## Image input versus presentation
+
+The public service figure is a presentation artifact. [Visual notes](VISUAL-NOTES.md)
+instead send bounded normalized pixels to an explicitly selected local vision
+model and return a separate human-review draft. There is no automatic path into
+an actor observation or scientific evidence. The standard actor interface stays
+text-only; do not attach a player's private image to a model instance shared by
+other roles.

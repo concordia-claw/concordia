@@ -71,6 +71,7 @@ setuptools.setup(
             'GAME.md',
             'MULTIPLAYER.md',
             'VOICE.md',
+            'VISUAL-NOTES.md',
             'RESEARCHER.md',
             'ENGINES.md',
             'PUBLIC-ACCOUNT.md',

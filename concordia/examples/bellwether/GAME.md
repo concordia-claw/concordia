@@ -336,3 +336,10 @@ selection through repeated/appended journal snapshots, draft/caret retention,
 changed filter/completion and host revocation/rejoin. These tests republish
 scoped snapshots and component fixtures, without running a simulation or model.
 They are not physical-device or screen-reader usability studies.
+
+## Optional model-side image drafts
+
+[Local visual notes](VISUAL-NOTES.md) provide an explicit image-to-text CLI with
+an installed vision-capable model. This is separate from the downloadable SVG,
+and requires human review; it does not attach images to shared actor context,
+add a browser upload endpoint, or automatically submit a game action.
