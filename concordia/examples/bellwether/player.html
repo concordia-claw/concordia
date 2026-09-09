@@ -44,7 +44,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <div id="play"><header><p id="role-badge"></p><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · AI residents scripted</span>
 <h1>Last Light<br>at Bellwether</h1><p class="subtle">An island community. One stormy night.</p>
 <details id="first-play" hidden><summary>How to play your role</summary><p id="role-guide"></p></details>
-<p id="connection" role="status">Connecting…</p><p id="opening"></p><button id="begin" hidden>Begin the night</button></header>
+<p id="recipe-note" class="subtle"></p><p id="connection" role="status">Connecting…</p><p id="opening"></p><button id="begin" hidden>Begin the night</button></header>
 <section aria-labelledby="map-title"><h2 id="map-title">The island</h2><div id="resources"></div><p id="supply-note" class="subtle"></p>
 <div id="map" aria-label="Locations around Bellwether harbor"></div><p id="location" class="subtle">Choose a place. Looking around does not move time.</p>
 <p id="service-note" role="status"></p><details id="service-history" hidden><summary>Service across the watches</summary><table><caption>Resolved service, not promises or predictions</caption><thead id="service-head"></thead><tbody id="service-rows"></tbody></table></details>
@@ -212,6 +212,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'The account is complete':'Connected · '+(human.pending?'Your turn':spectator?'Watching public events':night?.next_actor&&night.next_actor!==role?'Waiting for '+night.next_actor:human.status);
   $('public-account').hidden=!night;
   $('export-html').disabled=$('export-json').disabled=!connected||exporting;
+  $('recipe-note').textContent=state.recipe&&state.recipe.recipe!=='bellwether'?'Teaching case: '+state.recipe.recipe.replaceAll('-',' ')+'. '+state.recipe.fuel_consumed_before_play+' fuel used before play; Used totals include that initial consumption. Fixed Bellwether consent and accounting still apply.':'';
   $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused'||spectator;$('begin').disabled=!connected||sending||(state.multiplayer&&!state.players_ready);if(state.multiplayer&&!state.players_ready)$('connection').textContent='Waiting for the host to approve both players';
   $('resources').replaceChildren();
   if(night){

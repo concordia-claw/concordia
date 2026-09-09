@@ -56,9 +56,8 @@ The recipe helper only prepares a standard Config and fresh scenario component.
 It does **not** run an engine, start a server, upload data, import user-supplied
 Python, or serialize live human readers. Call it anew for every run; do not
 reuse a built Config's attached components. These are headless/terminal recipe
-examples, not a new browser project editor. The browser's existing `--dispute-file`
-option supports the delivered-account variation; the new recipes are not
-silently added as browser CLI presets.
+examples, not a new browser project editor. The browser supports explicit recipe
+selection and a separate baseline `--dispute-file` option as described below.
 
 ## Architecture and ownership
 
@@ -249,3 +248,55 @@ fixture, these tests, or a single local-model night.
 [ENGINES.md](ENGINES.md) provides a runnable simultaneous resource council,
 actual scheduling/API differences, and explicit asynchronous limitations.
 The main Bellwether night remains Sequential.
+
+## Select the same initial case in the browser
+
+From this source checkout, choose a named trusted recipe explicitly:
+
+```sh
+python -m concordia.examples.bellwether.run --mode fixture \
+  --recipe mutual-aid --editor-port 8784 --player-port 8785 \
+  --output runs/mutual-aid-fixture
+```
+
+Open the printed **Player** URL. The page labels the teaching case and its
+initial assumptions. **Begin the night** is explicit; opening/reloading the
+page never runs or resets a simulation. The server uses the exact
+`prepare_case` Config/world described above, not a copied recipe interpreter.
+For the host-approved two-human path add `--multiplayer`; Coordinator and Nell
+retain their own input and observation scope. The host must approve both players.
+Other residents keep the selected standard minimal/basic policy.
+
+Choose from `bellwether` (unchanged default), `mutual-aid`,
+`resource-governance`, or `institutional-dispute`. To use available local
+residents, replace `--mode fixture` with `--mode live --model llama3.2:3b`;
+fixture results do not establish live behavior. This change verifies initial
+recipe selection, not another live night or human usability result.
+
+`--recipe` is an initial-launch choice, **not** an editor operation for changing
+an active game. Use a different output directory and unused ports for each
+independent night. The one-turn `--mode slice` excludes non-default recipes.
+`--dispute-file` is supported only with `--recipe bellwether`; combining it
+with another case is rejected before reading the file or constructing a model
+or service. No file may supply importable Python or a new recipe name.
+
+The mutual-aid case starts with Generator4 + reserve2 + Used2. **Used is a
+cumulative ledger**: two units were consumed before play. The browser labels
+this condition and the public account includes the declared opening/initial
+condition events. The dawn `fuel_used` field remains cumulative for compatibility;
+subtract the manifest's `fuel_consumed_before_play` when measuring in-night
+consumption. This is not a post-hoc deletion of resources or an experimental
+comparison with a shared baseline.
+
+The saved `outcome.json` player projection and developer initial view include
+the public recipe manifest (not private account text). Existing JSON/HTML raw
+traces still contain private context and must remain host-only. The public
+account continues to omit recipient-only dispute notes and private accounts.
+
+Regression checks compare exact initial actor states, Config instances and
+worlds against independent headless builds for every recipe and both standard
+policies. Chromium verifies 360px openings, initial stocks/charters, reload and
+host-approved recipient-only dispute delivery using a component fixture. These
+checks do not invoke Simulation.play or a model; existing full-game execution
+wiring is unchanged. Checkpoint, arbitrary project authoring, experimental and
+physical-device acceptance remain separate.

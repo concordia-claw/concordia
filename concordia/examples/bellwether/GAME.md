@@ -268,3 +268,14 @@ They verify the initial/served/unserved distinction, keyboard-only inspection
 without API mutations, 360px portrait, 800px landscape, forced colors and enlarged
 text. These are software/accessibility checks, not physical-phone or human
 usability validation.
+
+
+## Initial teaching presets
+
+Use `--recipe mutual-aid`, `resource-governance`, or `institutional-dispute`
+with `--mode fixture` or `live` to play a trusted teaching variation through
+the same server and engine. The default is `bellwether`. See
+[RESEARCHER.md](RESEARCHER.md#select-the-same-initial-case-in-the-browser) for
+commands, exact initial-condition changes and interpretation limits. A preset
+is selected only at launch, not applied to a running night. Existing game
+processes are never replaced by this option.

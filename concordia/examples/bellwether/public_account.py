@@ -134,7 +134,8 @@ def render_html(account: dict) -> str:
       + str(dawn['services_total'])
       + ' facility-watches supplied. '
       + str(dawn['fuel_used'])
-      + ' fuel consumed. '
+      + ' fuel consumed in the cumulative Used ledger (including any declared'
+      ' pre-play consumption). '
       + (
           'The beacon was repaired.'
           if dawn['repair_completed']

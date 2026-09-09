@@ -18,10 +18,10 @@ import copy
 import json
 import time
 
-from concordia.components.game_master import make_observation
 from concordia.examples.bellwether import game
 from concordia.examples.bellwether import game_prefab
 from concordia.examples.bellwether import public_account
+from concordia.examples.bellwether import researcher
 from concordia.examples.bellwether import scenario
 from concordia.examples.bellwether import service
 from concordia.utils import operation_service as ops
@@ -45,6 +45,7 @@ class Game(service.Bellwether):
       *,
       model=None,
       actor_logic='minimal',
+      recipe='bellwether',
       dispute=None,
       session_id=None,
       port=0,
@@ -53,11 +54,18 @@ class Game(service.Bellwether):
   ):
     self.fixture = model is None
     self.backend = 'fixture' if self.fixture else 'live'
-    self.world = game.StormNight(
-        game.new_inventory(),
-        make_observation.ObservationQueue(),
-        dispute=dispute,
-    )
+
+    def configuration(reader):
+      self.case = researcher.prepare_case(
+          recipe,
+          reader,
+          actor_logic=actor_logic,
+          human_readers=human_readers,
+          dispute=dispute,
+      )
+      self.world = self.case.world
+      return self.case.config
+
     self.profiler = profiler
     self.step_times = []
     self._action_started = None
@@ -65,21 +73,16 @@ class Game(service.Bellwether):
         output,
         session_id=session_id,
         port=port,
-        config_factory=lambda reader: game_prefab.configuration(
-            reader,
-            self.world,
-            actor_logic=actor_logic,
-            human_readers=human_readers,
-        ),
+        config_factory=configuration,
         model=model or game_prefab.FixtureModel(),
         max_steps=64,
     )
     self.world.lock = self.operations.lock
     self.operations.references['project_id'] = 'bellwether-night-v1'
-    self.inbox.add_observation(game.OPENING)
+    self.inbox.add_observation(self.case.opening)
 
   def _seed(self):
-    self.world.seed()
+    """The case factory already seeded this world before building entities."""
 
   def _register(self):
     super()._register()
@@ -142,7 +145,7 @@ class Game(service.Bellwether):
 
   def player_view(self):
     public = copy.deepcopy(scenario.PUBLIC)
-    public['opening'] = game.OPENING
+    public['opening'] = self.case.opening
     public['watch'] = self.world.view()['watch']
     return {
         'scenario': public,
@@ -150,6 +153,7 @@ class Game(service.Bellwether):
         'human': self.inbox.snapshot(),
         'phase': self.phase,
         'fixture': self.fixture,
+        'recipe': copy.deepcopy(self.case.manifest),
     }
 
   def developer_view(self):
@@ -157,6 +161,7 @@ class Game(service.Bellwether):
     view.update({
         'initial': {
             'mechanics': copy.deepcopy(scenario.INITIAL),
+            'recipe': copy.deepcopy(self.case.manifest),
             'dispute': copy.deepcopy(self.world.dispute),
             'institutions': copy.deepcopy(self.world.institutions),
         },

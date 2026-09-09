@@ -46,9 +46,12 @@ class Case:
   config: prefab.Config
   world: game.StormNight
   manifest: dict[str, Any]
+  opening: str = game.OPENING
 
 
-def prepare_case(name, reader, *, actor_logic='minimal', human_readers=None):
+def prepare_case(
+    name, reader, *, actor_logic='minimal', human_readers=None, dispute=None
+):
   """Return standard Config + owned world, ready for generic.Simulation.
 
   Values are declared in this trusted module, not loaded as Python from user
@@ -57,6 +60,10 @@ def prepare_case(name, reader, *, actor_logic='minimal', human_readers=None):
   """
   if name not in RECIPES:
     raise ValueError('Choose a supported recipe: ' + ', '.join(RECIPES))
+  if dispute is not None and name != 'bellwether':
+    raise ValueError(
+        'Custom dispute is supported only with the bellwether recipe'
+    )
   if not callable(reader):
     raise ValueError('reader must be a runtime HumanInput callable')
   if human_readers is not None and (
@@ -68,7 +75,7 @@ def prepare_case(name, reader, *, actor_logic='minimal', human_readers=None):
   accounts = {n: v[1] for n, v in scenario.RESIDENTS.items()}
   goals = {n: v[0] for n, v in scenario.RESIDENTS.items()}
   institutions = copy.deepcopy(game.INSTITUTIONS)
-  dispute = copy.deepcopy(game.DEFAULT_DISPUTE)
+  dispute = copy.deepcopy(game.DEFAULT_DISPUTE if dispute is None else dispute)
   opening = game.OPENING
   preconsumed = 0
   if name == 'mutual-aid':
@@ -142,9 +149,10 @@ def prepare_case(name, reader, *, actor_logic='minimal', human_readers=None):
     if actor in accounts:
       params['account'] = accounts[actor]
       params['goal'] = goals[actor]
-      params['custom_instructions'] += (
-          ' This teaching variation asks you to consider: ' + goals[actor]
-      )
+      if name != 'bellwether':
+        params['custom_instructions'] += (
+            ' This teaching variation asks you to consider: ' + goals[actor]
+        )
     instances.append(replace(instance, params=params))
   config = replace(config, instances=instances)
   world.seed(opening=opening, accounts=accounts)
@@ -176,4 +184,5 @@ def prepare_case(name, reader, *, actor_logic='minimal', human_readers=None):
               'fictional teaching configuration, not empirical evidence'
           ),
       },
+      opening,
   )

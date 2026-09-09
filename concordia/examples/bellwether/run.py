@@ -22,6 +22,7 @@ import time
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.bellwether import game_service
 from concordia.examples.bellwether import multiplayer
+from concordia.examples.bellwether import researcher
 from concordia.examples.bellwether import service
 from concordia.language_model import call_limit_wrapper
 from concordia.language_model import profiled_language_model
@@ -53,6 +54,15 @@ def main(argv=None):
   )
   parser.add_argument('--model', default='llama3.2:3b')
   parser.add_argument(
+      '--recipe',
+      choices=researcher.RECIPES,
+      default='bellwether',
+      help=(
+          'Trusted initial teaching case; selection never replaces an active'
+          ' run.'
+      ),
+  )
+  parser.add_argument(
       '--multiplayer',
       action='store_true',
       help=(
@@ -80,6 +90,10 @@ def main(argv=None):
   args = parser.parse_args(argv)
   if args.multiplayer and args.mode == 'slice':
     parser.error('--multiplayer requires --mode fixture or live')
+  if args.recipe != 'bellwether' and args.mode == 'slice':
+    parser.error('--recipe requires --mode fixture or live')
+  if args.recipe != 'bellwether' and args.dispute_file:
+    parser.error('--dispute-file requires --recipe bellwether')
   dispute = (
       json.loads(args.dispute_file.read_text(encoding='utf-8'))
       if args.dispute_file
@@ -113,6 +127,7 @@ def main(argv=None):
           port=args.editor_port,
           model=model,
           actor_logic=args.resident_prefab,
+          recipe=args.recipe,
           dispute=dispute,
           profiler=profile,
           **(
