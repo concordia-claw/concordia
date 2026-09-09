@@ -39,7 +39,12 @@ Omit `--multiplayer` to retain single-player behavior.
 6. Reload or close/reopen a tab to reconnect. This browser retains its role and
    the server retains its pending turn; draft text is per-session/per-role.
    Clearing cookies requires a fresh host-approved request. There is no automatic
-   AI takeover or simulated action when a player disconnects.
+   AI takeover or simulated action when a player disconnects. If the browser
+   reports that it is offline, sending and joining are disabled immediately;
+   your current journal and editable draft remain available. On reconnect, the
+   page waits for a fresh, authorized snapshot before enabling network actions.
+   Returning online does not confirm that the server is reachable and never
+   resends an action whose reply was lost. Check the journal before retrying.
 7. To move a role to a new device, host `session.revoke` the old request and approve
    the new one. The game continues waiting for the same pending input. Existing
    streams lose authorization on their next delivered snapshot. Already viewed

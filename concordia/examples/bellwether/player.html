@@ -108,11 +108,11 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  const api=name=>new URL('api/'+name,location.origin+location.pathname.replace(/\/?$/,'/')).href;
  const announceError=message=>{$('error').textContent=message};
  $('jump-action').onclick=()=>{$('composer').scrollIntoView({block:'start',behavior:'auto'});$('action').focus({preventScroll:true})};
- $('join-form').onsubmit=async e=>{e.preventDefault();$('join-submit').disabled=true;
+ $('join-form').onsubmit=async e=>{e.preventDefault();if(!connected||navigator.onLine===false)return;$('join-submit').disabled=true;
   try{const response=await fetch(api('join'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:$('join-name').value,role:$('join-role').value})});const result=await response.json();if(!response.ok)throw new Error(result.error.message);$('join-status').textContent='Waiting for host approval as '+roleLabel(result.requested_role);}
-  catch(error){announceError(error.message)}finally{$('join-submit').disabled=false}
+  catch(error){announceError(error.message)}finally{$('join-submit').disabled=!connected||navigator.onLine===false}
  };
- async function ownJoin(){try{const response=await fetch(api('session'));if(response.ok){const own=await response.json();if(own.requested_role)$('join-status').textContent='Waiting for host approval as '+roleLabel(own.requested_role);}}catch{}}
+ async function ownJoin(){if(!connected||navigator.onLine===false)return;try{const response=await fetch(api('session'));if(response.ok){const own=await response.json();if(connected&&current?.result.lobby&&own.requested_role)$('join-status').textContent='Waiting for host approval as '+roleLabel(own.requested_role);}}catch{}}
 
  // Preserve native focus; reset retained presentation at every role boundary.
  const rendered=new Map();let journalRows=[];
@@ -285,7 +285,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   const state=data.result;
   if(state.lobby){rendered.clear();journalRows=[];voice.disconnect();visualNotes.disconnect();invalidatePreview();previewScope='';$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
    for(const id of ['context','journal','prompt','outcome','responses'])$(id).replaceChildren();
-   if(identity){$('action').value='';identity='';}resetSubmission();ownJoin();return;}
+   if(identity){$('action').value='';identity='';}resetSubmission();$('join-submit').disabled=!connected||navigator.onLine===false;ownJoin();return;}
   $('join').hidden=true;$('play').hidden=false;
   const world=state.scenario,human=state.human,night=state.night;
   const failed=state.phase==='failed',completed=state.phase==='completed',closed=runIsClosed(state);
@@ -471,10 +471,30 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('export-html').onclick=()=>downloadAccount('html');$('export-json').onclick=()=>downloadAccount('json');
  $('action-form').onsubmit=e=>{e.preventDefault();if(current?.result.human.pending)dispatch('human.respond',{request_id:current.result.human.pending.id,response:current.result.role==='Nell'?JSON.stringify({decision:$('decision').value,speech:$('action').value}):$('action').value})};
  $('begin').onclick=()=>dispatch('game.begin',{});
- const stream=new EventSource(api('events'));
- stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
+ let stream=null;
+ function disconnected(){
+  connected=false;voice.disconnect();visualNotes.disconnect();invalidatePreview();
+  $('connection').textContent='Reconnecting… your draft is kept';
+  $('act').disabled=true;$('begin').disabled=true;$('join-submit').disabled=true;
+  if(current)render(current);
+ }
+ function connect(){
+  if(stream||navigator.onLine===false)return;
+  const active=new EventSource(api('events'));stream=active;
+  active.onmessage=e=>{
+   if(stream!==active||navigator.onLine===false)return;
+   const data=JSON.parse(e.data);
+   if(current&&data.revision<current.revision)return;
+   connected=true;render(data);
+  };
+  // Keep native EventSource retry for stream errors; never resend actions.
+  active.onerror=()=>{if(stream===active)disconnected()};
+ }
+ window.addEventListener('offline',()=>{if(stream)stream.close();stream=null;disconnected()});
+ window.addEventListener('online',()=>{if(!stream){disconnected();connect()}});
+ $('join-submit').disabled=true;
+ if(navigator.onLine===false)disconnected();else connect();
  // Local elapsed time only; no requests or automatic resend.
  setInterval(waitingStatus,5000);
- stream.onerror=()=>{connected=false;voice.disconnect();visualNotes.disconnect();invalidatePreview();$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
 })();
 </script></body></html>
