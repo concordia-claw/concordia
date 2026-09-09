@@ -59,3 +59,44 @@ def test_choice_generation_obeys_optional_limit(bound):
       assert 'num_predict' not in options
     else:
       assert options['num_predict'] == bound
+
+
+@pytest.mark.parametrize('response_format', [None, 'json', {'type': 'object'}])
+def test_text_format_is_opt_in_and_choice_keeps_its_own_json_contract(
+    response_format,
+):
+  with mock.patch.object(ollama_model.ollama, 'Client') as client:
+    client.return_value.generate.return_value = {'response': '{"choice":"a"}'}
+    model = ollama_model.OllamaLanguageModel(
+        'local-model', response_format=response_format
+    )
+    model.sample_text('prompt')
+    args = client.return_value.generate.call_args.kwargs
+    if response_format is None:
+      assert 'format' not in args
+    else:
+      assert args['format'] == response_format
+    assert model.sample_choice('choice prompt', ['a', 'b'])[:2] == (0, 'a')
+    assert client.return_value.generate.call_args.kwargs['format'] == 'json'
+
+
+def test_caller_schema_mutation_cannot_change_subsequent_requests():
+  with mock.patch.object(ollama_model.ollama, 'Client') as client:
+    client.return_value.generate.return_value = {'response': '{}'}
+    schema = {'type': 'object', 'required': ['answer']}
+    model = ollama_model.OllamaLanguageModel(
+        'local-model', response_format=schema
+    )
+    schema['required'].clear()
+    model.sample_text('prompt')
+    assert client.return_value.generate.call_args.kwargs['format'] == {
+        'type': 'object',
+        'required': ['answer'],
+    }
+
+
+def test_unknown_text_format_rejected_before_client_creation():
+  with mock.patch.object(ollama_model.ollama, 'Client') as client:
+    with pytest.raises(ValueError, match='response_format'):
+      ollama_model.OllamaLanguageModel('local-model', response_format='xml')
+    client.assert_not_called()

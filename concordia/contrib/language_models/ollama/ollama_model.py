@@ -14,9 +14,10 @@
 
 """Ollama Language Model, a wrapper for models running on the local machine."""
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
+import copy
 import json
-from typing import override
+from typing import Any, Literal, override, TypedDict
 
 from concordia.language_model import language_model
 from concordia.utils import measurements as measurements_lib
@@ -38,6 +39,10 @@ _DEFAULT_SYSTEM_MESSAGE = (
 )
 
 
+class _TextFormatOptions(TypedDict, total=False):
+  format: Literal['json'] | dict[str, Any]
+
+
 class OllamaLanguageModel(language_model.LanguageModel):
   """Language Model that uses Ollama LLM models."""
 
@@ -50,6 +55,7 @@ class OllamaLanguageModel(language_model.LanguageModel):
       channel: str = language_model.DEFAULT_STATS_CHANNEL,
       request_timeout: float | None = None,
       max_output_tokens: int | None = None,
+      response_format: str | Mapping[str, Any] | None = None,
   ) -> None:
     """Initializes the instance.
 
@@ -62,7 +68,21 @@ class OllamaLanguageModel(language_model.LanguageModel):
         channel: The channel to write the statistics to.
         request_timeout: Optional HTTP timeout in seconds for local requests.
         max_output_tokens: Upper bound, including callers with larger limits.
+        response_format: Optional sample_text format: 'json' or an Ollama JSON
+          schema. Omitted by default; sample_choice retains its own format.
+          The provider constrains shape, not factual or semantic correctness.
     """
+    if (
+        response_format is not None
+        and response_format != 'json'
+        and not (isinstance(response_format, Mapping))
+    ):
+      raise ValueError("response_format must be 'json', a schema or None")
+    self._text_format_options: _TextFormatOptions = {}
+    if isinstance(response_format, Mapping):
+      self._text_format_options['format'] = copy.deepcopy(dict(response_format))
+    elif response_format == 'json':
+      self._text_format_options['format'] = 'json'
     self._model_name = model_name
     self._client = ollama.Client(timeout=request_timeout)
     if max_output_tokens is not None and max_output_tokens <= 0:
@@ -108,6 +128,7 @@ class OllamaLanguageModel(language_model.LanguageModel):
             'top_k': top_k,
         },
         keep_alive='10m',
+        **self._text_format_options,
     )
     result = response['response']
 
