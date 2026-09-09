@@ -341,23 +341,26 @@ class SimulationServer:
 
       def _handle_set_component_state(self) -> None:
         """Handle POST /cmd/set_component_state for dynamic editing."""
-        if not server.step_controller.is_paused:
-          self._send_json({
-              'status': 'error',
-              'message': 'Simulation must be paused to edit state.',
-          })
-          return
-
-        if server.simulation is None:
-          self._send_json({
-              'status': 'error',
-              'message': 'No simulation instance available.',
-          })
-          return
-
         try:
           content_length = int(self.headers.get('Content-Length', 0))
           body = self.rfile.read(content_length)
+          # Consume the framed request before replying, even when editing is
+          # unavailable. Closing with unread body bytes can reset the socket
+          # before the client has received the JSON error response.
+          if not server.step_controller.is_paused:
+            self._send_json({
+                'status': 'error',
+                'message': 'Simulation must be paused to edit state.',
+            })
+            return
+
+          if server.simulation is None:
+            self._send_json({
+                'status': 'error',
+                'message': 'No simulation instance available.',
+            })
+            return
+
           data = json.loads(body.decode('utf-8'))
 
           entity_name = data['entity_name']
