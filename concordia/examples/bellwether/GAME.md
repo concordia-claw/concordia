@@ -218,3 +218,31 @@ recognition is not assumed.
 The [researcher starter kit](RESEARCHER.md) maps the architecture and provides
 tested mutual-aid, resource-governance and institutional-dispute variants,
 with explicit assumptions and extension boundaries.
+
+
+## First-play guidance and free interpretation
+
+The role banner states whether this is single-player (human Coordinator plus
+four computer-controlled residents) or a shared night (human Coordinator and
+Nell plus three computer-controlled residents). Fixture residents are labelled
+scripted, not live-model results. **How to play your role** explains your own
+controls; spectators see public information and no action controls.
+
+The Coordinator can type an attempt and choose **Check interpretation · free**.
+This calls the same existing `game.preview` parser available to the attached
+CLI. It does not send an action, reserve resources, spend a choice or predict
+consent/success. Requests, accepted commitments, transfers, performed repairs,
+allocations and service promises stay distinct. A message to everyone is public,
+even if typed with the `message` prefix. Literal speech stays literal text.
+
+Only **Send action** submits an attempt. Checking first is optional. Editing the
+draft or changing turn/role invalidates old interpretations; a delayed reply
+cannot overwrite the interpretation of a newer draft. Connection loss cancels
+the pending preview, and saved drafts reappear only after the service identifies
+the session/role on reconnect. Nell keeps the structured accept/decline/speak UI,
+not the Coordinator's action parser.
+
+Browser regression checks cover the standard service/HTTP parser, free-query
+state equality, malformed/literal messages, stale delivery, reconnect and actual
+host-approved Nell/spectator pages with simulation execution prohibited. They do
+not establish physical Android usability or replace full played-night evidence.
