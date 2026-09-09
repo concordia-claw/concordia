@@ -279,3 +279,25 @@ the same server and engine. The default is `bellwether`. See
 commands, exact initial-condition changes and interpretation limits. A preset
 is selected only at launch, not applied to a running night. Existing game
 processes are never replaced by this option.
+
+
+## Reading and composing during live updates
+
+Repeated snapshots no longer recreate unchanged resident buttons, action
+suggestions or resident decision options. Keyboard focus stays on the same
+native control. The journal appends new visible events without replacing its
+unchanged prefix, and unchanged context text is retained, so copying a passage
+does not lose the selection merely because another update arrives. Draft text
+and its caret remain yours until an intentional edit or submission.
+
+A changed location filter, completed input session or role boundary still
+updates which controls and content are available. Revocation clears the retained
+journal immediately; rejoining as a spectator never restores the previous
+role's private text or action controls. Retention is local presentation state,
+not a durable checkpoint or a guarantee that an active operation can be cancelled.
+
+Real Chromium checks cover narrow portrait/landscape, native keyboard focus,
+selection through repeated/appended journal snapshots, draft/caret retention,
+changed filter/completion and host revocation/rejoin. These tests republish
+scoped snapshots and component fixtures, without running a simulation or model.
+They are not physical-device or screen-reader usability studies.
