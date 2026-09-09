@@ -31,6 +31,14 @@ import numpy as np
 import pytest
 
 
+def actor_states(simulation: generic.Simulation):
+  states = {}
+  for actor in simulation.get_entities():
+    assert isinstance(actor, entity_agent.EntityAgent)
+    states[actor.name] = actor.get_state()
+  return states
+
+
 @pytest.fixture(autouse=True)
 def no_execution():
   with mock.patch.object(
@@ -59,10 +67,7 @@ def test_headless_browser_component_parity_and_owned_state(
     )
     assert game.world.get_state() == case.world.get_state()
 
-    def states(sim):
-      return {e.name: e.get_state() for e in sim.get_entities()}
-
-    assert states(game.simulation) == states(simulation)
+    assert actor_states(game.simulation) == actor_states(simulation)
     assert game.config.instances == case.config.instances
     assert game.player_view()['recipe'] == case.manifest
     assert game.player_view()['scenario']['opening'] == case.opening
@@ -228,8 +233,6 @@ def test_default_matches_original_game_configuration_without_extra_prompts(
     world.seed()
     assert game.config.instances == config.instances
     assert game.world.get_state() == world.get_state()
-    assert {e.name: e.get_state() for e in game.simulation.get_entities()} == {
-        e.name: e.get_state() for e in simulation.get_entities()
-    }
+    assert actor_states(game.simulation) == actor_states(simulation)
   finally:
     game.close()
