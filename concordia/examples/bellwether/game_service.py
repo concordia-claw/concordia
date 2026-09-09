@@ -143,7 +143,7 @@ class Game(service.Bellwether):
         'initial': {
             'mechanics': copy.deepcopy(scenario.INITIAL),
             'dispute': copy.deepcopy(self.world.dispute),
-            'institutions': copy.deepcopy(game.INSTITUTIONS),
+            'institutions': copy.deepcopy(self.world.institutions),
         },
         'night': self.world.get_state(),
         'inventory': self.world.inventory_state(),

@@ -240,7 +240,9 @@ class StormNight(
 ):
   """Resolve the scenario’s consent, agenda, watches and grounded records."""
 
-  def __init__(self, stock, observations, *, dispute=None, lock=None):
+  def __init__(
+      self, stock, observations, *, dispute=None, institutions=None, lock=None
+  ):
     super().__init__()
     self.stock = stock
     self.observations = observations
@@ -256,6 +258,10 @@ class StormNight(
         or any(x not in NAMES for x in self.dispute['recipients'])
     ):
       raise ValueError('dispute requires text and valid recipient names')
+    self.institutions = copy.deepcopy(
+        INSTITUTIONS if institutions is None else institutions
+    )
+    self._validate_institutions(self.institutions)
     self.data: dict[str, Any] = {
         'watch': 0,
         'actions': 0,
@@ -271,7 +277,7 @@ class StormNight(
         'epilogue': None,
         'dawn_responses': {},
         'knowledge': {
-            name: [x['name'] for x in INSTITUTIONS] for name in NAMES
+            name: [x['name'] for x in self.institutions] for name in NAMES
         },
     }
     self._putative = ''
@@ -282,18 +288,63 @@ class StormNight(
           'night': self.data,
           'putative': self._putative,
           'dispute': self.dispute,
+          'institutions': self.institutions,
       })
 
   def set_state(self, state):
     # Component serialization is not a full engine continuation contract.
+    institutions = copy.deepcopy(state.get('institutions', self.institutions))
+    self._validate_institutions(institutions)
+    night = copy.deepcopy(state['night'])
+    putative = state['putative']
+    dispute = copy.deepcopy(state['dispute'])
     with self.lock:
-      self.data = copy.deepcopy(state['night'])
-      self._putative = state['putative']
-      self.dispute = copy.deepcopy(state['dispute'])
+      self.institutions = institutions
+      self.data = night
+      self._putative = putative
+      self.dispute = dispute
 
-  def seed(self):
-    self.emit('opening', OPENING)
-    for name, (_, account) in scenario.RESIDENTS.items():
+  @staticmethod
+  def _validate_institutions(institutions):
+    if not isinstance(institutions, list):
+      raise ValueError('institutions must be a list')
+    names = set()
+    for item in institutions:
+      if (
+          not isinstance(item, dict)
+          or set(item) != {'name', 'members', 'rule', 'enforcement'}
+          or any(
+              not isinstance(item[key], str)
+              for key in ('name', 'rule', 'enforcement')
+          )
+          or not item['name'].strip()
+          or item['name'] in names
+          or not isinstance(item['members'], list)
+          or any(name not in NAMES for name in item['members'])
+      ):
+        raise ValueError(
+            'institutions require unique names, known members and text'
+            ' rules/enforcement'
+        )
+      names.add(item['name'])
+
+  def seed(self, *, opening=OPENING, accounts=None):
+    accounts = (
+        {name: values[1] for name, values in scenario.RESIDENTS.items()}
+        if accounts is None
+        else copy.deepcopy(accounts)
+    )
+    if (
+        not isinstance(opening, str)
+        or not isinstance(accounts, dict)
+        or set(accounts) != set(scenario.RESIDENTS)
+        or any(not isinstance(text, str) for text in accounts.values())
+    ):
+      raise ValueError(
+          'seed requires opening text and one text account per resident'
+      )
+    self.emit('opening', opening)
+    for name, account in accounts.items():
       self.emit('private_memory', account, [name])
 
   def emit(self, kind, text, audience=None, **details):
@@ -726,7 +777,7 @@ class StormNight(
           'relationships': [
               x for x in data['relationships'] if viewer in x['recipients']
           ],
-          'institutions': INSTITUTIONS,
+          'institutions': self.institutions,
           'knowledge': data['knowledge'].get(viewer, []),
       })
 

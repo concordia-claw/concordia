@@ -68,6 +68,7 @@ class Resident(prefab_lib.Prefab):
     params: dict[str, Any] = dict(self.params)
     style = params.pop('decision_logic')
     account = params.pop('account')
+    institutions = params.pop('institutions', game.INSTITUTIONS)
     reader = params.pop('human_reader', None)
     params['extra_components'] = {
         scenario.ACCOUNT: constant.Constant(
@@ -75,11 +76,7 @@ class Resident(prefab_lib.Prefab):
         ),
         'Affiliations': constant.Constant(
             json.dumps(
-                [
-                    x
-                    for x in game.INSTITUTIONS
-                    if params['name'] in x['members']
-                ],
+                [x for x in institutions if params['name'] in x['members']],
                 ensure_ascii=False,
             ),
             pre_act_label='Institutions known to me',
@@ -206,6 +203,7 @@ def configuration(reader, world, *, actor_logic='minimal', human_readers=None):
                 'goal': goal,
                 'account': account,
                 'decision_logic': actor_logic,
+                'institutions': world.institutions,
                 **(
                     {'human_reader': human_readers[name]}
                     if human_readers and name in human_readers

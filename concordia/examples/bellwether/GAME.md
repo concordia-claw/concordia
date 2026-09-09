@@ -212,3 +212,9 @@ play, private role journals, Android controls, and the HTTPS boundary. Omit
 [Local voice controls](VOICE.md) add opt-in spoken observations and editable
 dictation on supported devices, retaining full text fallback. Android on-device
 recognition is not assumed.
+
+## Contributor recipes
+
+The [researcher starter kit](RESEARCHER.md) maps the architecture and provides
+tested mutual-aid, resource-governance and institutional-dispute variants,
+with explicit assumptions and extension boundaries.
