@@ -39,17 +39,13 @@ def join(page, url, name, role):
   )
 
 
-def approve_in_editor(host, name):
-  host.wait_for_function(
-      """name => {
-        const text = document.querySelector('#op-state').textContent;
-        return JSON.parse(text).result.join_requests.some(r=>r.label===name);
-      }""",
-      arg=name,
-  )
-  rows = json.loads(host.locator('#op-state').inner_text())['result'][
-      'join_requests'
-  ]
+def approve_in_editor(host, name, revision):
+  pw.expect(host.locator('#op-status')).to_contain_text(f'revision {revision}')
+  if not host.locator('#op-snapshot').evaluate('e=>e.open'):
+    host.locator('#op-snapshot summary').click()
+  host.select_option('#op-preview-field', 'join_requests')
+  host.click('#op-preview-refresh')
+  rows = json.loads(host.locator('#op-state').inner_text())
   row = next(r for r in rows if r['label'] == name)
   host.select_option('#op-name', 'session.approve')
   host.locator('[data-key=request_id]').fill(row['id'])
@@ -96,7 +92,9 @@ def test_two_players_host_approval_private_turn_reconnect_and_android(
     ]:
       join(page, url, name, role)
       assert 'PRIVATE_' not in page.content()
-      approve_in_editor(host, name)
+      approve_in_editor(
+          host, name, game.operations.snapshot('developer')['revision']
+      )
       pw.expect(page.locator('#role-badge')).to_contain_text(
           'Spectator' if role == 'spectator' else role
       )

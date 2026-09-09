@@ -66,6 +66,8 @@ def test_gui_cli_semantics_reconnect_and_player_privacy(tmp_path):
         playwright.expect(player.locator('#connection')).to_contain_text(
             'Connected'
         )
+        page.locator('#op-snapshot summary').click()
+        page.select_option('#op-preview-field', 'target')
         page.select_option('#op-name', 'component.edit')
         value = (
             'PRIVATE_EDIT: "quoted"\n</script><img src=x onerror=alert(1)> &'
@@ -74,6 +76,10 @@ def test_gui_cli_semantics_reconnect_and_player_privacy(tmp_path):
         page.locator('[data-key=value]').fill(value)
         with page.expect_request('**/api/dispatch') as captured:
           page.click('#op-submit')
+        playwright.expect(page.locator('#op-preview-status')).to_contain_text(
+            'newer'
+        )
+        page.click('#op-preview-refresh')
         playwright.expect(page.locator('#op-state')).to_contain_text(
             'PRIVATE_EDIT'
         )
@@ -108,6 +114,10 @@ def test_gui_cli_semantics_reconnect_and_player_privacy(tmp_path):
             'arguments': {'value': 'new live text'},
         }
         gui.operations.dispatch('developer', changed)
+        playwright.expect(page.locator('#op-preview-status')).to_contain_text(
+            'newer'
+        )
+        page.click('#op-preview-refresh')
         playwright.expect(page.locator('#op-state')).to_contain_text(
             'new live text'
         )
@@ -120,6 +130,11 @@ def test_gui_cli_semantics_reconnect_and_player_privacy(tmp_path):
             == 'keep this stale draft'
         )
         page.reload()
+        playwright.expect(page.locator('#op-status')).to_contain_text(
+            'Connected'
+        )
+        page.locator('#op-snapshot summary').click()
+        page.select_option('#op-preview-field', 'target')
         playwright.expect(page.locator('#op-state')).to_contain_text(
             'new live text'
         )

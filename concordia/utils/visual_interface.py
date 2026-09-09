@@ -1494,18 +1494,88 @@ def visualize_operations_to_html(config, *, title="Attached editor") -> str:
   <label>Operation <select id="op-name"></select></label>
   <p id="op-description"></p><form id="op-form"><div id="op-fields"></div>
   <button id="op-submit" disabled>Apply operation</button></form>
-  <p id="op-error" role="alert"></p><h2>Current authoritative state</h2>
-  <pre id="op-state" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+  <p id="op-error" role="alert"></p><h2>Received state</h2>
+  <p>Inspect an abbreviated preview or download the full received JSON.
+  This developer snapshot may contain private entity information.</p>
+  <button id="op-snapshot-download" disabled>Download received JSON</button>
+  <details id="op-snapshot"><summary>Snapshot preview (abbreviated)</summary>
+  <label>State section <select id="op-preview-field"><option value="">Whole envelope</option></select></label>
+  <p id="op-preview-status" role="status">No preview captured.</p>
+  <button id="op-preview-refresh" disabled>Refresh preview</button>
+  <pre id="op-state" style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:28rem;overflow:auto"></pre>
+  </details>
   <details><summary>Last operation result</summary><pre id="op-result" style="white-space:pre-wrap"></pre></details>
   </section><script>
   (() => {
     let current, definitions = [], dirty = false, draftRevision, draftRefs;
     let connected = false, sending = false;
     const $ = id => document.getElementById(id);
-    const show = state => {
+    let receivedJSON, previewRevision, previewSection = 'Whole envelope', sectionKeys = [];
+    const abbreviated = value => {
+      let nodes = 0;
+      const walk = (item, depth) => {
+        if (++nodes > 100) return '[preview: remaining values omitted]';
+        if (typeof item === 'string') return item.length > 240
+          ? item.slice(0, 240) + '[preview: remaining text omitted]' : item;
+        if (typeof item === 'number' && Number.isInteger(item) && !Number.isSafeInteger(item))
+          return '[preview: number outside safe integer range; download original JSON]';
+        if (item === null || typeof item !== 'object') return item;
+        if (depth > 5) return '[preview: nested values omitted]';
+        if (Array.isArray(item)) {
+          const result = item.slice(0, 8).map(x => walk(x, depth + 1));
+          if (item.length > 8) result.push(`[preview: ${item.length - 8} more items]`);
+          return result;
+        }
+        const keys = Object.keys(item), result = Object.create(null);
+        for (const key of keys.slice(0, 12))
+          result[key.slice(0, 100)] = walk(item[key], depth + 1);
+        if (keys.length > 12) result['[preview: omitted fields]'] = keys.length - 12;
+        return result;
+      };
+      return JSON.stringify(walk(value, 0), null, 2).slice(0, 24000);
+    };
+    const previewStatus = () => {
+      if (previewRevision === undefined) return;
+      $('op-preview-status').textContent = `Preview revision ${previewRevision} · ${previewSection} · abbreviated, not a complete state` +
+        (current.revision !== previewRevision ? ' · a newer state has arrived; refresh to inspect it.' : '.');
+    };
+    const refreshPreview = () => {
+      if (!current) return;
+      const key = $('op-preview-field').value;
+      previewSection = key ? `result.${key}` : 'Whole envelope';
+      $('op-state').textContent = abbreviated(key ? current.result[key] : current);
+      previewRevision = current.revision; previewStatus();
+    };
+    $('op-snapshot').addEventListener('toggle', () => {
+      if ($('op-snapshot').open && previewRevision === undefined) refreshPreview();
+    });
+    $('op-preview-refresh').onclick = refreshPreview;
+    $('op-preview-field').onchange = refreshPreview;
+    $('op-snapshot-download').onclick = () => {
+      if (!current) return;
+      // Preserve the received wire representation: parsing/re-serializing
+      // would round integer identifiers larger than JavaScript's safe range.
+      const blob = new Blob([receivedJSON], {type:'application/json'});
+      const url = URL.createObjectURL(blob), link = document.createElement('a');
+      link.href = url; link.download = `developer-received-revision-${current.revision}.json`;
+      link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const show = (state, received) => {
       if (current && state.revision < current.revision) return;
-      current = state;
-      $('op-state').textContent = JSON.stringify(state, null, 2);
+      current = state; receivedJSON = received;
+      const keys = Object.keys(current.result || {});
+      if (keys.length !== sectionKeys.length || keys.some((key, i) => key !== sectionKeys[i])) {
+        const select = $('op-preview-field'), selected = select.value;
+        select.replaceChildren();
+        for (const key of ['', ...keys]) {
+          const option = document.createElement('option'); option.value = key;
+          option.textContent = key || 'Whole envelope'; select.append(option);
+        }
+        if (keys.includes(selected)) select.value = selected;
+        sectionKeys = keys;
+      }
+      $('op-snapshot-download').disabled = false;
+      $('op-preview-refresh').disabled = false; previewStatus();
       $('op-status').textContent = `Connected · revision ${state.revision}`;
       $('op-submit').disabled = sending;
       for (const field of $('op-fields').querySelectorAll('[data-key]')) field.disabled = false;
@@ -1552,7 +1622,7 @@ def visualize_operations_to_html(config, *, title="Attached editor") -> str:
       fields();
     }).catch(error=>{$('op-error').textContent=error.message});
     const events = new EventSource('/api/events');
-    events.onmessage = e => {connected = true; show(JSON.parse(e.data));};
+    events.onmessage = e => {connected = true; show(JSON.parse(e.data), e.data);};
     events.onerror = () => {connected = false; $('op-submit').disabled = true;
       $('op-status').textContent='Disconnected · reconnecting; drafts kept'};
   })();

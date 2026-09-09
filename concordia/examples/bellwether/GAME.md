@@ -459,3 +459,22 @@ automated wall time. Six of nine facility-watches were supplied; no repair was
 forced. This single run does not establish reliability across models or seeds.
 Automated runs do not establish physical Android usability, human play duration,
 deterministic replay or empirical social validity.
+
+
+### Inspecting a large developer snapshot
+
+The attached editor receives authoritative state through the existing service.
+Its Snapshot preview is closed initially and is explicitly abbreviated. Select
+a state section (for example, target or join_requests) to inspect it, and use
+Refresh preview when a newer received revision is indicated. Incoming updates
+do not rewrite the preview being read or reset an unsent operation draft. A
+stale edit is still rejected by the existing server validation.
+
+Download received JSON exports the original last-received event text, including
+large integer identifiers; it does not parse and re-serialize them in JavaScript.
+The preview marks unsafe integer values and limits nested values, text and lists.
+It must not be used as a complete state or checkpoint. The downloaded developer
+snapshot can contain private actor information; it is not the sanitized public
+account, nor is it a complete resumable engine checkpoint. This change reduces
+eager DOM rendering, not server/SSE payload size or
+network cost. Full download occurs only when requested.
