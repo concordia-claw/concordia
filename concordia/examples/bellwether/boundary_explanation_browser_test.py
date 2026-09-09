@@ -50,7 +50,7 @@ def test_free_boundary_inspection_matches_record_and_survives_sse(
       page.locator('#service-history summary').click()
       assert page.locator('#service-rows button').count() == 3
       for record in records:
-        label = 'Dusk · ' + record['facility'] + ' · '
+        label = 'Watch 1 · Early evening · ' + record['facility'] + ' · '
         button = page.get_by_role(
             'button',
             name=label

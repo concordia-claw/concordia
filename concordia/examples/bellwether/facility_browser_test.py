@@ -81,12 +81,19 @@ def test_map_status_history_and_free_inspection(
           for _ in range(3):
             game.world.resolve(rules.PLAYER, 'wait')
           game.operations.publish({'kind': 'test.resolved_watch_fixture'})
-          pwlib.expect(beacon).to_contain_text('Dusk · Unserved')
+          pwlib.expect(beacon).to_contain_text(
+              'Watch 1 · Early evening · Unserved'
+          )
           assert beacon.evaluate("e=>e.classList.contains('unserved')")
           assert not beacon.evaluate("e=>e.classList.contains('lit')")
           shelter = page.locator('#map [data-location="Storm shelter"]')
-          pwlib.expect(shelter).to_contain_text('Dusk · Maintained')
-          assert 'Dusk · Maintained' in shelter.get_attribute('aria-label')
+          pwlib.expect(shelter).to_contain_text(
+              'Watch 1 · Early evening · Maintained'
+          )
+          assert (
+              'Watch 1 · Early evening · Maintained'
+              in shelter.get_attribute('aria-label')
+          )
           pwlib.expect(
               page.locator('#map [data-location="Generator yard"]')
           ).to_contain_text('4 fuel available')

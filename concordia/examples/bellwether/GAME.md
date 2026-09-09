@@ -377,3 +377,16 @@ identities and session references are excluded. A recipe label neither captures
 all interventions nor guarantees deterministic replay or empirical validity.
 World-only/older records without setup provenance remain explicitly unknown;
 the exporter never infers setup from later stock or narrative.
+
+
+### Player names and watch labels
+
+The player UI calls the Coordinator **Coordinator Alice** and labels the first
+watch **Watch 1 · Early evening**, so a time-of-night badge is not mistaken for
+a resident. High Tide and Before Dawn retain their existing names.
+
+These are display aliases only. Authenticated role IDs, join request values,
+draft recovery keys and entity names remain Coordinator; the first recorded
+watch remains Dusk. Raw dialogue, the human component's assembled context,
+public account records and API/CLI values are not rewritten. The role guide
+explains this mapping. Existing hosted chapters are not reset by this change.

@@ -78,7 +78,7 @@ def test_interpretation_is_free_literal_and_uses_shared_parser(host, tmp_path):
       page.on('pageerror', lambda e: errors.append(str(e)))
       page.goto(url)
       pwlib.expect(page.locator('#role-badge')).to_contain_text(
-          'Single player · You are Coordinator · Four scripted residents'
+          'Single player · You are Coordinator Alice · Four scripted residents'
       )
       assert not page.locator('#join').is_visible()
       page.locator('#first-play summary').click()

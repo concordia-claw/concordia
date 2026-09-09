@@ -69,7 +69,7 @@ def test_full_game_inspection_clarification_and_retry(tmp_path):
         page.goto(url)
         playwright.expect(page.locator('#act')).to_be_enabled()
         playwright.expect(page.locator('#watch')).to_have_text(
-            'Dusk · 4 choices remain'
+            'Watch 1 · Early evening · 4 choices remain'
         )
         initial = game.operations.snapshot('player')
         for button in page.locator('#map button').all():
