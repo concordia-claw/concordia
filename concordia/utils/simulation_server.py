@@ -27,6 +27,7 @@ import threading
 from typing import Any
 
 from concordia.environment import step_controller as step_controller_lib
+from concordia.utils import operation_service as operation_service_lib
 
 
 class SimulationServer:
@@ -43,6 +44,8 @@ class SimulationServer:
       port: int = 8080,
       html_content: str = '',
       host: str = '127.0.0.1',
+      operation_service: operation_service_lib.OperationService | None = None,
+      audience: str = 'developer',
   ):
     """Initialize the simulation server.
 
@@ -54,7 +57,12 @@ class SimulationServer:
         `/cmd/set_component_state`, which can overwrite arbitrary simulation
         state) are unauthenticated. Pass '0.0.0.0' explicitly to accept
         connections from other machines on the network.
+      operation_service: Optional shared operation registry. When set, only the
+        capability-bound API is exposed; legacy endpoints are disabled.
+      audience: Fixed audience for this listener, never supplied by a request.
     """
+    self._operation_service = operation_service
+    self._audience = audience
     self._port = port
     self._html_content = html_content
     self._host = host
@@ -72,6 +80,11 @@ class SimulationServer:
     self._server_thread: threading.Thread | None = None
     print(f'[SERVER INIT] SimulationServer initialized on port {port}')
     sys.stdout.flush()
+
+  @property
+  def is_serving(self) -> bool:
+    """Whether this listener is serving requests."""
+    return self._server is not None
 
   @property
   def host(self) -> str:
@@ -297,6 +310,8 @@ class SimulationServer:
   def _create_handler(self):
     """Create a request handler class with access to server state."""
     server = self
+    operation_service = self._operation_service
+    audience = self._audience
 
     class Handler(http.server.BaseHTTPRequestHandler):
       """HTTP request handler for simulation server."""
@@ -310,6 +325,9 @@ class SimulationServer:
         print(f'[SERVER] GET request received: {self.path}')
 
         sys.stdout.flush()
+        if operation_service is not None:
+          self._handle_operation_get()
+          return
         if self.path == '/':
           self._serve_html()
         elif self.path == '/events':
@@ -324,6 +342,9 @@ class SimulationServer:
 
       def do_POST(self) -> None:  # pylint: disable=invalid-name
         """Handle POST requests for simulation control commands."""
+        if operation_service is not None:
+          self._handle_operation_post()
+          return
         if self.path in ('/play', '/pause', '/step', '/stop'):
           self._send_json(server.execute_command(self.path[1:]))
         elif self.path == '/cmd/set_component_state':
@@ -331,6 +352,81 @@ class SimulationServer:
         else:
           print(f'[SERVER] Unknown path: {self.path}')
           self.send_error(404)
+
+      def _handle_operation_get(self) -> None:
+        # Dedicated capability-bound listeners NEVER fall through to legacy
+        # checkpoint, status or mutation routes, including developer listeners.
+        service = operation_service
+        assert service is not None
+        if self.path == '/':
+          self._serve_html()
+        elif self.path == '/api/operations':
+          self._send_json(service.discover(audience))
+        elif self.path == '/api/state':
+          self._send_json(service.snapshot(audience))
+        elif self.path == '/api/events':
+          self._serve_server_sent_events()
+        else:
+          self._send_json(
+              {
+                  'error': {
+                      'code': 'not_found',
+                      'message': 'Use /api/operations.',
+                  }
+              },
+              404,
+          )
+
+      def _handle_operation_post(self) -> None:
+        service = operation_service
+        assert service is not None
+        # Consume or close rejected bodies; never leave unread bytes on reuse.
+        self.close_connection = True
+        if self.path != '/api/dispatch':
+          self._send_json(
+              {
+                  'error': {
+                      'code': 'not_found',
+                      'message': 'Use /api/operations.',
+                  }
+              },
+              404,
+          )
+          return
+        origin = self.headers.get('Origin')
+        if origin and origin != 'http://' + self.headers.get('Host', ''):
+          self._send_json(
+              {
+                  'error': {
+                      'code': 'origin',
+                      'message': 'Same-origin requests only.',
+                  }
+              },
+              403,
+          )
+          return
+        try:
+          length = int(self.headers.get('Content-Length', 0))
+          if not 0 < length <= 1024 * 1024:
+            raise ValueError('Body must be 1 byte to 1 MiB.')
+          if self.headers.get_content_type() != 'application/json':
+            raise ValueError('Send application/json.')
+          body = json.loads(self.rfile.read(length).decode('utf-8'))
+          self._send_json(service.dispatch(audience, body))
+        except operation_service_lib.OperationError as error:
+          self._send_json(
+              {'error': {'code': error.code, 'message': str(error)}}, 409
+          )
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+          self._send_json(
+              {
+                  'error': {
+                      'code': 'invalid_request',
+                      'message': 'Invalid JSON operation request.',
+                  }
+              },
+              400,
+          )
 
       def _serve_html(self) -> None:
         """Serve the visualization HTML."""
@@ -344,32 +440,40 @@ class SimulationServer:
         self._send_json(server.get_status())
 
       def _serve_server_sent_events(self) -> None:
-        """Serve Server-Sent Events stream."""
+        """Stream retained updates using the configured audience."""
+        self.close_connection = True
+        service = operation_service
+        client = (
+            service.subscribe(audience)
+            if service is not None
+            else server.subscribe_to_events()
+        )
         self.send_response(200)
         self.send_header('Content-type', 'text/event-stream')
         self.send_header('Cache-Control', 'no-cache')
         self.send_header('Connection', 'keep-alive')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        if service is None:
+          self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
-
-        # Retained state and subsequent broadcasts share the same ordered queue.
-        server_sent_events_queue = server.subscribe_to_events()
-
         try:
-          while True:
+          while server.is_serving:
             try:
-              message = server_sent_events_queue.get(timeout=30)
+              message = client.get(timeout=1)
+              if service is not None:
+                message = 'data: ' + json.dumps(message) + '\n\n'
               self.wfile.write(message.encode('utf-8'))
-              self.wfile.flush()
             except queue.Empty:
               self.wfile.write(b': keepalive\n\n')
-              self.wfile.flush()
+            self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
           pass
         finally:
-          with server.server_sent_events_lock:
-            if server_sent_events_queue in server.server_sent_events_queues:
-              server.server_sent_events_queues.remove(server_sent_events_queue)
+          if service is not None:
+            service.unsubscribe(client)
+          else:
+            with server.server_sent_events_lock:
+              if client in server.server_sent_events_queues:
+                server.server_sent_events_queues.remove(client)
 
       def _handle_set_component_state(self) -> None:
         """Handle POST /cmd/set_component_state for dynamic editing."""
@@ -420,11 +524,13 @@ class SimulationServer:
           print(f'[SERVER] Error setting component state: {e}')
           self._send_json({'status': 'error', 'message': str(e)})
 
-      def _send_json(self, data: dict[str, Any]) -> None:
+      def _send_json(self, data: dict[str, Any], status: int = 200) -> None:
         """Send JSON response."""
-        self.send_response(200)
+        self.send_response(status)
         self.send_header('Content-type', 'application/json')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-store')
+        if operation_service is None:
+          self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(data).encode('utf-8'))
 

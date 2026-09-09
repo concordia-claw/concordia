@@ -1476,3 +1476,85 @@ def visualize_config_to_html(
 </html>"""
 
   return html
+
+
+def visualize_operations_to_html(config, *, title="Attached editor") -> str:
+  """Extend the standard diagram/inspector with discovered service operations.
+
+  Legacy controls are read-only here: all mutations use the shared registry.
+  The service supplies current state; text drafts are not an engine state store.
+  """
+  page = visualize_config_to_html(config, title=title)
+  page = page.replace("if (window.location.protocol !== 'file:')", "if (false)")
+  panel = r"""
+  <section id="operations-panel" style="position:fixed;inset:0 0 0 55%;
+  background:#20232b;color:#eee;padding:24px;overflow:auto;z-index:20">
+  <h1>Attached editor</h1><p>Runtime operations · initial prefab configuration unchanged</p>
+  <p id="op-status" role="status">Connecting…</p>
+  <label>Operation <select id="op-name"></select></label>
+  <p id="op-description"></p><form id="op-form"><div id="op-fields"></div>
+  <button id="op-submit" disabled>Apply operation</button></form>
+  <p id="op-error" role="alert"></p><h2>Current authoritative state</h2>
+  <pre id="op-state" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+  <details><summary>Last operation result</summary><pre id="op-result" style="white-space:pre-wrap"></pre></details>
+  </section><script>
+  (() => {
+    let current, definitions = [], dirty = false, draftRevision, draftRefs;
+    let connected = false, sending = false;
+    const $ = id => document.getElementById(id);
+    const show = state => {
+      if (current && state.revision < current.revision) return;
+      current = state;
+      $('op-state').textContent = JSON.stringify(state, null, 2);
+      $('op-status').textContent = `Connected · revision ${state.revision}`;
+      $('op-submit').disabled = sending;
+      for (const field of $('op-fields').querySelectorAll('[data-key]')) field.disabled = false;
+    };
+    function fields() {
+      dirty = false;
+      const op = definitions.find(x => x.name === $('op-name').value);
+      $('op-description').textContent = op.description;
+      $('op-fields').replaceChildren();
+      for (const [key, spec] of Object.entries(op.input.properties)) {
+        const label = document.createElement('label'); label.textContent = `${key}: ${spec.description}`;
+        const input = document.createElement(spec.type === 'string' ? 'textarea' : 'input');
+        input.dataset.key = key; input.dataset.type = spec.type; input.disabled = !connected;
+        if (spec.type !== 'string') input.type = 'number';
+        input.style.cssText = 'display:block;width:95%;min-height:60px;margin:8px 0;background:#131820;color:#eee';
+        input.addEventListener('input', () => {
+          if (!dirty) { draftRevision = current.revision; draftRefs = current.references; dirty = true; }
+        });
+        label.append(input); $('op-fields').append(label);
+      }
+    }
+    $('op-name').onchange = fields;
+    $('op-form').onsubmit = async e => {
+      e.preventDefault(); if (!current || !connected || sending) return;
+      $('op-error').textContent = '';
+      const arguments_ = {};
+      for (const field of $('op-fields').querySelectorAll('[data-key]'))
+        arguments_[field.dataset.key] = field.dataset.type === 'integer' ? Number(field.value) : field.value;
+      const request = {operation: $('op-name').value, arguments: arguments_,
+        references: dirty ? draftRefs : current.references, revision: dirty ? draftRevision : current.revision,
+        retry_key: crypto.randomUUID()};
+      sending = true; $('op-submit').disabled = true;
+      try {
+        const response = await fetch('/api/dispatch', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+        const value = await response.json();
+        if (!response.ok) throw new Error(value.error.message);
+        $('op-result').textContent = JSON.stringify(value, null, 2); dirty = false;
+      } catch(error) { $('op-error').textContent = error.message; }
+      finally { sending = false; $('op-submit').disabled = !connected; }
+    };
+    fetch('/api/operations').then(r=>r.json()).then(value=>{
+      definitions = value.result.operations;
+      for (const op of definitions) { const option=document.createElement('option'); option.value=op.name;option.textContent=op.name;$('op-name').append(option); }
+      fields();
+    }).catch(error=>{$('op-error').textContent=error.message});
+    const events = new EventSource('/api/events');
+    events.onmessage = e => {connected = true; show(JSON.parse(e.data));};
+    events.onerror = () => {connected = false; $('op-submit').disabled = true;
+      $('op-status').textContent='Disconnected · reconnecting; drafts kept'};
+  })();
+  </script>"""
+  return page.replace("</body>", panel + "</body>")

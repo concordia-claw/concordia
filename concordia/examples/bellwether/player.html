@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Last Light at Bellwether</title><style>
+:root {color-scheme:dark;font:17px/1.55 system-ui;background:#0b1720;color:#eadfca}
+body {margin:0 auto;max-width:800px;padding:24px 18px 120px}h1{font:2.2rem Georgia,serif;margin-bottom:6px} h2{font-size:1.2rem}
+.subtle{color:#acb9bc} .badge {border:1px solid #a99566;padding:4px 12px;border-radius:20px;font-size:.8rem}
+#map{display:grid;grid-template-columns:1fr 1fr;gap:12px;background:radial-gradient(ellipse,#28454a,#122634);padding:18px;border-radius:12px}
+button{font:inherit;cursor:pointer;color:inherit;background:#203642;border:1px solid #5d797a;border-radius:8px;padding:12px}button:hover{background:#314d55}button:disabled{opacity:.5;cursor:wait}
+.card{border-left:3px solid #c7a566;padding:8px 14px;background:#14252e;margin:10px 0}.card p{margin:4px 0}
+pre,.story{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.story{border-top:1px solid #30434d;padding:16px 0}
+textarea{box-sizing:border-box;width:100%;min-height:100px;padding:12px;background:#11222c;color:inherit;border:1px solid #799093;border-radius:8px;font:inherit}
+#act{background:#dfbd76;color:#15222a;font-weight:bold}#error{color:#ffc1a8}#connection{font-size:.85rem}
+</style></head><body>
+<span class="badge">Dusk · one-turn fixture</span><h1>Last Light at Bellwether</h1>
+<p class="subtle">An island community. One stormy night.</p>
+<p id="connection" role="status">Connecting…</p><p id="opening"></p>
+<h2>Inspect the island</h2><div id="map"></div><p id="location" class="subtle">Select a location to see who is there. Inspection does not move time.</p>
+<div id="cast"></div><h2>Your account of the night</h2><div id="journal" aria-live="polite"></div>
+<details><summary>Your available context</summary><pre id="context"></pre></details>
+<h2 id="prompt">Waiting for this fixture to begin</h2>
+<form id="action-form"><label for="action">Your proposal or action</label><textarea id="action" placeholder="Ask Mara what the harbor needs, propose a discussion, or wait…"></textarea>
+<p><button type="button" id="wait">Suggest waiting</button> <button id="act" disabled>Send action</button></p></form>
+<p id="error" role="alert"></p><p class="subtle">This first slice records one action with a fixed response. It does not yet simulate negotiation, fuel allocation or the full night.</p>
+<script>
+(() => {
+ const $=id=>document.getElementById(id); let current, retry, sending=false, picked, connected=false;
+ $('action').value=sessionStorage.getItem('bellwether-draft')||'';
+ $('action').oninput=()=>{sessionStorage.setItem('bellwether-draft',$('action').value);retry=null};
+ $('wait').onclick=()=>{$('action').value='Wait and listen.';$('action').oninput()};
+ function render(data) {
+   if(current && data.revision < current.revision) return;
+   current=data; const state=data.result, world=state.scenario, human=state.human;
+   $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'Fixture complete':'Connected · '+human.status;
+   $('opening').textContent=world.opening;
+   if(!$('map').children.length) for(const location of world.locations){
+     const button=document.createElement('button');button.textContent=location;
+     button.onclick=()=>{picked=location;render(current)};$('map').append(button);
+   }
+   $('cast').replaceChildren();
+   for(const resident of world.cast.filter(x=>!picked||x.location===picked)){
+     const card=document.createElement('article');card.className='card';
+     const name=document.createElement('strong');name.textContent=resident.name;
+     const description=document.createElement('p');description.textContent=resident.role+' · '+resident.location;
+     card.append(name,description);$('cast').append(card);
+   }
+   if(picked) $('location').textContent=picked+' · inspection only';
+   $('journal').replaceChildren();for(const entry of human.entries){
+     const p=document.createElement('p');p.className='story';p.textContent=entry.text;$('journal').append(p);
+   }
+   $('context').textContent=human.pending?.context||'';
+   $('prompt').textContent=human.pending?.prompt||(human.finished?'The fixture is complete':'Waiting for the next prompt');
+   $('act').disabled=!connected||sending||!human.pending;
+ }
+ $('action-form').onsubmit=async e=>{
+   e.preventDefault();if(!connected||!current||!current.result.human.pending||sending)return;
+   $('error').textContent=''; const draft=$('action').value;
+   retry=retry||{operation:'human.respond',arguments:{request_id:current.result.human.pending.id,response:draft},
+      references:current.references,revision:current.revision,retry_key:crypto.randomUUID()};
+   sending=true;$('act').disabled=true;
+   try{
+     const response=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(retry)});
+     const result=await response.json();if(!response.ok){retry=null;throw new Error(result.error.message)}
+     retry=null;if($('action').value===draft){$('action').value='';sessionStorage.removeItem('bellwether-draft')}
+   }catch(error){$('error').textContent=error.message+' Your draft is kept.'}
+   finally{sending=false;render(current)}
+ };
+ const stream=new EventSource('/api/events');stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
+ stream.onerror=()=>{connected=false;$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true};
+})();
+</script></body></html>

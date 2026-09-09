@@ -14,6 +14,7 @@
 
 """In-process, reconnectable transport adapter; no simulation logic lives here."""
 
+from collections.abc import Callable
 import threading
 
 from concordia.components.agent import human_act_component
@@ -35,14 +36,21 @@ class HumanSession:
   the process runs. A new process always has new request IDs; no action is replayed.
   """
 
-  def __init__(self, *, role: str = 'player'):
+  def __init__(
+      self,
+      *,
+      role: str = 'player',
+      on_request: Callable[[], None] | None = None,
+      initial_status: str = 'The star-loom is waking…',
+  ):
     self.role = role
+    self._on_request = on_request
     self._condition = threading.Condition()
     self._pending: human_input.HumanInputRequest | None = None
     self._response: str | None = None
     self._accepted: tuple[str, str] | None = None
     self._closed = False
-    self._status = 'The star-loom is waking…'
+    self._status = initial_status
     self._entries: list[dict[str, str]] = []
     self._observations_seen = 0
     self._revision = 0
@@ -68,6 +76,9 @@ class HumanSession:
         self._entries.append({'kind': 'story', 'text': part.strip()})
       self._observations_seen = len(parts)
       self._condition.notify_all()
+    if self._on_request is not None:
+      self._on_request()
+    with self._condition:
       self._condition.wait_for(
           lambda: self._response is not None or self._closed
       )

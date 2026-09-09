@@ -65,6 +65,7 @@ setuptools.setup(
     ],
     packages=setuptools.find_packages(include=['concordia', 'concordia.*']),
     package_data={
+        'concordia.examples.bellwether': ['player.html', 'README.md'],
         'concordia.examples.astral_canticle': [
             'static/*',
             'README.md',
@@ -85,6 +86,7 @@ setuptools.setup(
     ),
     entry_points={
         'console_scripts': [
+            'concordia-session=concordia.command_line_interface.concordia_session:main',
             'concordia-log=concordia.command_line_interface.concordia_log:main',
         ],
     },
