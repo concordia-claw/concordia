@@ -510,3 +510,19 @@ survive reload. The account export remains labelled interrupted and is not a
 saved game. Reloading does not restart the run; no automatic retry, replay or
 replacement worker is added. Human action/Begin controls stop accepting input,
 and unrelated host-approval messages cannot overwrite the terminal status.
+
+### Current-state delivery to slow clients
+
+The attached SSE listener uses the standard operation service's optional
+coalesced wakeups. It retains at most one pending notification per client,
+instead of materializing and queueing full snapshots that the listener would
+discard. The listener still builds the current authorized snapshot at delivery,
+including rechecking the browser's role. Direct snapshot subscriptions retain
+their existing default behavior.
+
+This is a current-state feed, not a promise to deliver every intermediate
+revision separately. The domain event ledger and latest revision retain all
+published updates. JSON envelopes, reconnect snapshots, heartbeat comments,
+player privacy and read-only exports are unchanged. Full delivered snapshots
+can still be large; this change does not compress their contents or establish
+any model-latency, bandwidth or physical-device performance result.

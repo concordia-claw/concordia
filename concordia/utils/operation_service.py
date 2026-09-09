@@ -129,7 +129,7 @@ class OperationService:
     self.revision = 0
     self._operations: dict[str, Operation] = {}
     self._views: dict[str, Callable[[], Any]] = {}
-    self._clients: dict[queue.Queue, str] = {}
+    self._clients: dict[queue.Queue, tuple[str, bool]] = {}
     self._retries: dict[str, tuple[str, dict]] = {}
     self._retry_capacity = retry_capacity
     self._events: list[dict] = []
@@ -161,12 +161,15 @@ class OperationService:
         'result': result,
     })
 
+  def _resolve_view(self, audience: str) -> Callable[[], Any]:
+    audience = self.audience_resolver(audience)
+    if audience not in self._views:
+      raise OperationError('forbidden', 'No view for this audience.')
+    return self._views[audience]
+
   def snapshot(self, audience: str) -> dict:
     with self.lock:
-      audience = self.audience_resolver(audience)
-      if audience not in self._views:
-        raise OperationError('forbidden', 'No view for this audience.')
-      return self._envelope(self._views[audience]())
+      return self._envelope(self._resolve_view(audience)())
 
   def events(self) -> list[dict]:
     with self.lock:
@@ -179,7 +182,15 @@ class OperationService:
       self._events.append(
           {'revision': self.revision, **self._origin, **copy.deepcopy(event)}
       )
-      for client, audience in list(self._clients.items()):
+      for client, (audience, notifications_only) in list(self._clients.items()):
+        if notifications_only:
+          # A current-state reader needs only one pending wakeup. Never
+          # materialize a potentially large/private view just to discard it.
+          try:
+            client.put_nowait(None)
+          except queue.Full:
+            pass
+          continue
         # Retained snapshots let slow clients recover the current state.
         try:
           client.put_nowait(self.snapshot(audience))
@@ -190,11 +201,24 @@ class OperationService:
             pass  # A concurrent consumer freed the queue.
           client.put_nowait(self.snapshot(audience))
 
-  def subscribe(self, audience: str) -> queue.Queue:
+  def subscribe(
+      self, audience: str, *, notifications_only: bool = False
+  ) -> queue.Queue:
+    """Subscribe to snapshots, or coalesced wakeups for a current-state reader.
+
+    By default the queue contains owned snapshot envelopes, as before.
+    notifications_only queues at most one None token, including an initial
+    wakeup. The reader must call snapshot(audience) at delivery time to resolve
+    current authorization and state. Wakeups are not an event history; the
+    domain event ledger and revision still retain every published event.
+    """
     with self.lock:
-      client = queue.Queue(maxsize=16)
-      client.put(self.snapshot(audience))
-      self._clients[client] = audience
+      if notifications_only:
+        # Validate scope without invoking the view.
+        self._resolve_view(audience)
+      client = queue.Queue(maxsize=1 if notifications_only else 16)
+      client.put(None if notifications_only else self.snapshot(audience))
+      self._clients[client] = (audience, notifications_only)
       return client
 
   def unsubscribe(self, client: queue.Queue) -> None:

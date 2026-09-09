@@ -563,7 +563,7 @@ class SimulationServer:
         self.close_connection = True
         service = operation_service
         client = (
-            service.subscribe(self._request_audience)
+            service.subscribe(self._request_audience, notifications_only=True)
             if service is not None
             else server.subscribe_to_events()
         )
@@ -580,7 +580,7 @@ class SimulationServer:
               message = client.get(timeout=1)
               if service is not None:
                 # Re-resolve the principal at delivery, not just subscribe time.
-                # Queued snapshots must not outlive role revocation.
+                # A pending wakeup carries no old/private snapshot.
                 message = (
                     'data: '
                     + json.dumps(service.snapshot(self._request_audience))
