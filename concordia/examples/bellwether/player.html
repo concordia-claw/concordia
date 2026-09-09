@@ -13,6 +13,7 @@ button:disabled{opacity:.5;cursor:default}#begin,#act{background:var(--gold);col
 #map{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:28px 40px;background:radial-gradient(ellipse at 25% 55%,#2e4d4a 0%,#1b353b 46%,#0d2335 48%,#123247 63%,#0b2032 66%);border:1px solid #416570;border-radius:45% 18% 30% 18%;padding:46px 20px;min-height:250px}
 #map button{z-index:1;font-size:.95rem;background:#102734eb;box-shadow:0 2px 10px #0008;min-height:75px}
 #map button.lit{border-color:#efc276;box-shadow:0 0 24px #eab86b50;background:#3d3728}
+#map button.unserved{border-style:dashed;border-color:#f0ac94}#map .facility-status{font-weight:700;color:inherit}
 #map button[aria-pressed=true]{outline:2px solid var(--gold)}#map small{display:block;font-size:.72rem}
 #cast{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
 .card{border-left:3px solid #c7a566;padding:14px;background:#132a35;border-radius:4px}.card p{margin:5px 0}.card button{font-size:.85rem;padding:7px 10px;margin:5px 6px 0 0}
@@ -46,6 +47,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <p id="connection" role="status">Connecting…</p><p id="opening"></p><button id="begin" hidden>Begin the night</button></header>
 <section aria-labelledby="map-title"><h2 id="map-title">The island</h2><div id="resources"></div><p id="supply-note" class="subtle"></p>
 <div id="map" aria-label="Locations around Bellwether harbor"></div><p id="location" class="subtle">Choose a place. Looking around does not move time.</p>
+<p id="service-note" role="status"></p><details id="service-history" hidden><summary>Service across the watches</summary><table><caption>Resolved service, not promises or predictions</caption><thead id="service-head"></thead><tbody id="service-rows"></tbody></table></details>
 <button id="all-cast" type="button">All residents</button><div id="cast"></div></section>
 <section id="epilogue" hidden aria-labelledby="dawn-title"><h2 id="dawn-title">Dawn at Bellwether</h2><div id="outcome"></div><div id="responses"></div></section>
 <details id="voice"><summary>Voice options · optional, on-device only</summary>
@@ -81,6 +83,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  async function ownJoin(){try{const response=await fetch(api('session'));if(response.ok){const own=await response.json();if(own.requested_role)$('join-status').textContent='Waiting for host approval as '+own.requested_role;}}catch{}}
 
  const labels=['Harbor beacon','Storm shelter','Cooperative cold store','Generator yard'];
+ const watches=['Dusk','High Tide','Before Dawn'];let serviceHistoryKey='';
  const facility={'Harbor beacon':'beacon','Storm shelter':'shelter','Cooperative cold store':'cold store'};
  const descriptions={Mara:'Harbor master · boats and safe passage',Nell:'Cooperative custodian · reserves and livelihoods',Ivo:'Engineer · repairs and working conditions',Sam:'Shelter steward · displaced residents'};
  $('action').value='';
@@ -212,6 +215,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused'||spectator;$('begin').disabled=!connected||sending||(state.multiplayer&&!state.players_ready);if(state.multiplayer&&!state.players_ready)$('connection').textContent='Waiting for the host to approve both players';
   $('resources').replaceChildren();
   if(night){
+   renderServiceHistory(night);
    const stock=night.inventory;
    for(const value of ['Generator: '+stock.Generator.fuel+' fuel','Nell: '+stock.Nell.fuel+' reserve',night.repair?'Beacon repair complete':'Spare part: '+(stock.Nell.part?'with Nell':stock.Ivo.part?'with Ivo':'installed')])text($('resources'),'span',value);
    $('supply-note').textContent='Requested this watch: '+(night.allocation.join(', ')||'none')+'. Lights show the last resolved watch, not promises.';
@@ -221,13 +225,18 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
    $('institutions').replaceChildren();
    for(const institution of night.institutions){text($('institutions'),'h3',institution.name);text($('institutions'),'p',institution.rule);text($('institutions'),'p',institution.enforcement,'subtle')}
   }
+  $('service-history').hidden=!night;
   if(!$('map').children.length)for(const loc of world.locations){
-   const button=document.createElement('button');button.dataset.location=loc;button.type='button';text(button,'span',loc);text(button,'small','Inspect · free');
+   const button=document.createElement('button');button.dataset.location=loc;button.type='button';text(button,'span',loc);text(button,'small','Inspect · free');text(button,'small','','facility-status');
    button.onclick=()=>{picked=loc;render(current)};$('map').append(button);
   }
   for(const b of $('map').children){
    const loc=b.dataset.location;b.setAttribute('aria-pressed',String(picked===loc));
-   b.classList.toggle('lit',Boolean(night?.services.filter(x=>x.facility===facility[loc]).at(-1)?.served));
+   const result=night?.services.filter(x=>x.facility===facility[loc]).at(-1);
+   const status=!night?'':loc==='Generator yard'?night.inventory.Generator.fuel+' fuel available':result?result.watch+' · '+(result.served?'Maintained':'Unserved'):'Not resolved yet';
+   const label=b.querySelector('.facility-status');if(label.textContent!==status)label.textContent=status;
+   b.setAttribute('aria-label',loc+(status?'. '+status:'')+'. Inspect; no turn cost.');
+   b.classList.toggle('lit',Boolean(result?.served));b.classList.toggle('unserved',Boolean(result&&!result.served));
   }
   $('location').textContent=picked?picked+' · inspection only':'Choose a place. Looking around does not move time.';
   $('cast').replaceChildren();
@@ -241,7 +250,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   voice.update(connected?identity+':'+(human.pending?.id||'waiting'):'',Boolean(connected&&human.pending&&!spectator),entries.at(-1)?.text||'');
   for(const entry of entries){
    const p=text(journal,'p','','story'+(entry.recipients?.length<5?' private':''));
-   if(night)text(p,'small',(entry.watch<3?['Dusk','High Tide','Before Dawn'][entry.watch]:'Dawn')+(entry.recipients.length<5?' · Private':''));
+   if(night)text(p,'small',(entry.watch<3?watches[entry.watch]:'Dawn')+(entry.recipients.length<5?' · Private':''));
    text(p,'span',entry.text);
   }
   if(atEnd)journal.scrollTop=journal.scrollHeight;
@@ -279,6 +288,15 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
    if(operation==='human.respond'&&$('action').value===draft){$('action').value='';sessionStorage.removeItem(draftKey)}
   }catch(error){$('error').textContent=error.message+' Your draft is kept.'}
   finally{sending=false;render(current)}
+ }
+ function renderServiceHistory(night){
+  const signature=JSON.stringify(night.services);if(signature===serviceHistoryKey)return;serviceHistoryKey=signature;
+  const latest=night.services.at(-1),note=latest?'Latest resolved watch: '+latest.watch+'. Map labels show recorded service, not requests or promises.':'No watch has been resolved yet. Requested supply is not delivered service.';
+  $('service-note').textContent=note;$('service-head').replaceChildren();$('service-rows').replaceChildren();
+  const header=text($('service-head'),'tr','');for(const label of ['Watch',...Object.values(facility).map(name=>name[0].toUpperCase()+name.slice(1))]){const cell=text(header,'th',label);cell.scope='col'}
+  for(const watch of watches){const row=text($('service-rows'),'tr',''),heading=text(row,'th',watch);heading.scope='row';
+   for(const name of Object.values(facility)){const record=night.services.find(x=>x.watch===watch&&x.facility===name);const cell=text(row,'td',record?(record.served?'Served':'Unserved'):'Not resolved');if(record)cell.title=record.consequence}
+  }
  }
  function invalidatePreview(){previewSerial++;previewController?.abort();previewController=null;$('preview-result').textContent=''}
  function updatePreview(){

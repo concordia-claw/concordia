@@ -246,3 +246,25 @@ Browser regression checks cover the standard service/HTTP parser, free-query
 state equality, malformed/literal messages, stale delivery, reconnect and actual
 host-approved Nell/spectator pages with simulation execution prohibited. They do
 not establish physical Android usability or replace full played-night evidence.
+
+## Reading service status without relying on color
+
+Each map location now says **Not resolved yet**, or names the last resolved
+watch and whether service was **Maintained** or **Unserved**. The generator yard
+shows its current fuel stock. The glow and dashed border are supplementary;
+keyboard and screen-reader names contain the same status in words. Map inspection
+still has no turn cost.
+
+**Service across the watches** shows a native table with watch row headers and
+facility column headers. **Not resolved** means there is no recorded outcome
+for that watch; it does not predict success or failure. Requested allocations and
+promises are not delivered service. The table and map reuse only the existing
+public service records, so spectators receive the same accounting without role
+journals or private conversation data.
+
+Browser checks use one watch resolved through the existing scenario component
+as a deterministic fixture (no Simulation.play/entity.act/model invocation).
+They verify the initial/served/unserved distinction, keyboard-only inspection
+without API mutations, 360px portrait, 800px landscape, forced colors and enlarged
+text. These are software/accessibility checks, not physical-phone or human
+usability validation.
