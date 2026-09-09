@@ -69,8 +69,33 @@ def document(world: game.StormNight, *, fixture: bool, phase: str) -> dict:
           'services': [
               {
                   key: record[key]
-                  for key in ('watch', 'facility', 'served', 'consequence')
+                  for key in (
+                      'watch',
+                      'facility',
+                      'served',
+                      'consequence',
+                      'demand',
+                  )
+                  if key in record
               }
+              | (
+                  {
+                      'resolution': {
+                          key: record['resolution'][key]
+                          for key in (
+                              'basis',
+                              'requested',
+                              'priority',
+                              'fuel_before',
+                              'fuel_spent',
+                              'explanation',
+                          )
+                          if key in record['resolution']
+                      }
+                  }
+                  if 'resolution' in record
+                  else {}
+              )
               for record in public['services']
           ],
       },
@@ -123,6 +148,12 @@ def render_html(account: dict) -> str:
           + escape(record['facility'])
           + '</strong><p>'
           + escape(record['consequence'])
+          + '</p><p>'
+          + escape(
+              record.get('resolution', {}).get(
+                  'explanation', 'Boundary details were not recorded.'
+              )
+          )
           + '</p></li>'
           for record in material['services']
       )

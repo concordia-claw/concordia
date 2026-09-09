@@ -344,3 +344,20 @@ an installed vision-capable model. On your own turn, the optional image-note
 review control reads its JSON locally, lets you edit it, and explicitly append
 the text to your existing draft before manual Send. It does not upload the note,
 attach images to shared actor context, or automatically submit an action.
+
+
+### Why a resolved service was supplied
+
+In **Service across the watches**, select **Served** or **Unserved** for a
+resolved facility. This free inspection displays the boundary's recorded
+request priority, available fuel and fuel spent, or the completed-repair rule.
+An omitted request is distinguished from a requested facility that lacked fuel.
+Requests are considered in their submitted order; later allocations or stock
+changes do not rewrite the prior explanation.
+
+These are explanations of Bellwether's material accounting rules, not of a
+resident's motives or the legitimacy of an institution. They do not establish a
+scientific causal conclusion. Readable public accounts include the same notes;
+public JSON adds an optional allowlisted service resolution object and demand.
+Older service records without these fields say that boundary details were not
+recorded, rather than inferring a reason from later stocks.

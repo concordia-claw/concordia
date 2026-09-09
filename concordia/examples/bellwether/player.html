@@ -40,7 +40,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 #voice label{display:block;margin:14px 0}#voice input{width:24px;height:24px;min-height:24px;vertical-align:middle}#voice button{min-height:48px;margin:5px 4px 5px 0}#transcript{min-height:100px}
 #visual-note input{display:block;max-width:100%;min-height:44px;margin:12px 0}#visual-note button{min-height:48px;margin:6px 4px 6px 0}#note-provenance,#note-summary{white-space:pre-wrap;overflow-wrap:anywhere}
-</style></head><body>
+#service-rows button{width:100%;min-width:0;min-height:44px;padding:.3rem .1rem;white-space:normal;overflow-wrap:anywhere}#service-explanation{white-space:pre-wrap}</style></head><body>
 <section id="join" hidden><h2>Join the night</h2><p>Choose a role and ask the host to approve this browser. Reloading keeps your place. No private information is shared until approval.</p><form id="join-form"><label for="join-name">Your name for the host</label><input id="join-name" maxlength="80" autocomplete="nickname" required><label for="join-role">Role</label><select id="join-role"><option>Coordinator</option><option>Nell</option><option value="spectator">Spectator · public events only</option></select><button id="join-submit">Request to join</button></form><p id="join-status" role="status"></p></section>
 <div id="play"><header><p id="role-badge"></p><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · AI residents scripted</span>
 <h1>Last Light<br>at Bellwether</h1><p class="subtle">An island community. One stormy night.</p>
@@ -48,7 +48,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <p id="recipe-note" class="subtle"></p><p id="connection" role="status">Connecting…</p><p id="opening"></p><button id="begin" hidden>Begin the night</button></header>
 <section aria-labelledby="map-title"><h2 id="map-title">The island</h2><div id="resources"></div><p id="supply-note" class="subtle"></p>
 <div id="map" aria-label="Locations around Bellwether harbor"></div><p id="location" class="subtle">Choose a place. Looking around does not move time.</p>
-<p id="service-note" role="status"></p><details id="service-history" hidden><summary>Service across the watches</summary><table><caption>Resolved service, not promises or predictions</caption><thead id="service-head"></thead><tbody id="service-rows"></tbody></table></details>
+<p id="service-note" role="status"></p><details id="service-history" hidden><summary>Service across the watches</summary><table><caption>Resolved service, not promises or predictions</caption><thead id="service-head"></thead><tbody id="service-rows"></tbody></table><p id="service-explanation" role="status">Choose a resolved service to see its recorded boundary details. Inspection is free.</p></details>
 <button id="all-cast" type="button">All residents</button><div id="cast"></div></section>
 <section id="epilogue" hidden aria-labelledby="dawn-title"><h2 id="dawn-title">Dawn at Bellwether</h2><div id="outcome"></div><div id="responses"></div></section>
 <details id="voice"><summary>Voice options · optional, on-device only</summary>
@@ -367,7 +367,12 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   $('service-note').textContent=note;$('service-head').replaceChildren();$('service-rows').replaceChildren();
   const header=text($('service-head'),'tr','');for(const label of ['Watch',...Object.values(facility).map(name=>name[0].toUpperCase()+name.slice(1))]){const cell=text(header,'th',label);cell.scope='col'}
   for(const watch of watches){const row=text($('service-rows'),'tr',''),heading=text(row,'th',watch);heading.scope='row';
-   for(const name of Object.values(facility)){const record=night.services.find(x=>x.watch===watch&&x.facility===name);const cell=text(row,'td',record?(record.served?'Served':'Unserved'):'Not resolved');if(record)cell.title=record.consequence}
+   for(const name of Object.values(facility)){const record=night.services.find(x=>x.watch===watch&&x.facility===name);const cell=text(row,'td',record?'':'Not resolved');
+    if(record){
+     const button=text(cell,'button',record.served?'Served':'Unserved');button.type='button';
+     button.setAttribute('aria-label',watch+' · '+name+' · '+(record.served?'Served':'Unserved')+' · Boundary details');
+     button.onclick=()=>{$('service-explanation').textContent=watch+' · '+name+'\n'+(record.resolution?.explanation||'Boundary details were not recorded.')+'\n'+record.consequence};
+    }}
   }
  }
  function invalidatePreview(){previewSerial++;previewController?.abort();previewController=null;$('preview-result').textContent=''}

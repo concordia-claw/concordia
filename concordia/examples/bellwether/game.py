@@ -670,15 +670,49 @@ class StormNight(
     supplied = []
     consumption = 0
     available = self.stock.get_player_inventory('Generator')['fuel']
-    for facility in self.data['allocations']:
-      demand = (
-          0
-          if facility == 'beacon' and watch == 2 and self.data['repair']
-          else 1
-      )
-      if consumption + demand <= available:
+    demands = {
+        facility: (
+            0
+            if facility == 'beacon' and watch == 2 and self.data['repair']
+            else 1
+        )
+        for facility in FACILITIES
+    }
+    resolutions = {}
+    for priority, facility in enumerate(self.data['allocations'], start=1):
+      demand = demands[facility]
+      fuel_before = available - consumption
+      served = consumption + demand <= available
+      if served:
         supplied.append(facility)
         consumption += demand
+      basis = (
+          'repair_supplied'
+          if served and demand == 0
+          else 'fuel_supplied'
+          if served
+          else 'fuel_shortfall'
+      )
+      prefix = f'Request priority {priority}: {fuel_before:g} fuel available; '
+      explanation = prefix + (
+          'the completed repair supplies the beacon for this watch '
+          'without fuel.'
+          if basis == 'repair_supplied'
+          else f'{demand:g} fuel spent to supply service.'
+          if served
+          else (
+              f'{demand:g} fuel required; no fuel spent because the '
+              'remaining stock was insufficient.'
+          )
+      )
+      resolutions[facility] = {
+          'basis': basis,
+          'requested': True,
+          'priority': priority,
+          'fuel_before': fuel_before,
+          'fuel_spent': demand if served else 0,
+          'explanation': explanation,
+      }
     if consumption:
       self.transfer('Generator', 'Used', 'fuel', consumption)
     for facility in FACILITIES:
@@ -687,13 +721,23 @@ class StormNight(
           'watch': WATCHES[watch],
           'facility': facility,
           'served': served,
-          'demand': (
-              0
-              if facility == 'beacon' and watch == 2 and self.data['repair']
-              else 1
-          ),
+          'demand': demands[facility],
           'consequence': (
               'Service maintained.' if served else CONSEQUENCES[facility]
+          ),
+          'resolution': resolutions.get(
+              facility,
+              {
+                  'basis': 'not_requested',
+                  'requested': False,
+                  'priority': None,
+                  'fuel_before': None,
+                  'fuel_spent': 0,
+                  'explanation': (
+                      'Service was not requested for this watch. No fuel was'
+                      ' spent.'
+                  ),
+              },
           ),
       })
     for c in self.data['commitments']:
