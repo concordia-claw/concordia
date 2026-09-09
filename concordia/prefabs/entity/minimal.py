@@ -52,6 +52,7 @@ class Entity(prefab_lib.Prefab):
           # will be inserted at the end of the component order.
           'extra_components_index': {},
           'randomize_choices': True,
+          'prefix_entity_name': True,
       }
   )
 
@@ -88,6 +89,7 @@ class Entity(prefab_lib.Prefab):
 
     agent_name = self.params.get('name', 'Alice')
     randomize_choices = self.params.get('randomize_choices', True)
+    prefix_entity_name = self.params.get('prefix_entity_name', True)
 
     custom_instructions = self.params.get('custom_instructions', None)
     if custom_instructions is not None:
@@ -142,6 +144,8 @@ class Entity(prefab_lib.Prefab):
           model=model,
           component_order=component_order,
           randomize_choices=randomize_choices,  # pyrefly: ignore[bad-argument-type]
+          # pyrefly: ignore[bad-argument-type]
+          prefix_entity_name=prefix_entity_name,
       )
 
     agent = entity_agent_with_logging.EntityAgentWithLogging(
