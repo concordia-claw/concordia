@@ -314,3 +314,19 @@ model and return a separate human-review draft. There is no automatic path into
 an actor observation or scientific evidence. The standard actor interface stays
 text-only; do not attach a player's private image to a model instance shared by
 other roles.
+
+
+### Setup context in a public account
+
+Saved public JSON, readable HTML and the public SVG now carry the trusted
+recipe's declared setup: recipe name, standard actor prefab/engine, human role
+names and initial fuel assumptions. The mutual-aid recipe declares two units
+used before play and six initially available; cumulative Used must not be
+confused with consumption during play.
+
+This optional public projection is **not a complete run configuration**.
+Private component edits, initial memories, prompts, model settings, browser
+identities and session references are excluded. A recipe label neither captures
+all interventions nor guarantees deterministic replay or empirical validity.
+World-only/older records without setup provenance remain explicitly unknown;
+the exporter never infers setup from later stock or narrative.

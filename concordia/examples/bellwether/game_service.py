@@ -102,6 +102,7 @@ class Game(service.Bellwether):
                 fixture=self.fixture,
                 phase=self.phase,
                 format_name=args['format'],
+                manifest=self.case.manifest,
             ),
             audiences=(*self.player_audiences, 'role:spectator', 'developer'),
         )

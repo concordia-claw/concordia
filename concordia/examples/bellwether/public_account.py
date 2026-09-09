@@ -14,6 +14,8 @@
 
 """Portable public records, not executable replay or component checkpoints."""
 
+from collections.abc import Mapping
+import copy
 import html
 import json
 
@@ -29,13 +31,62 @@ NOTICE = (
 )
 
 
-def document(world: game.StormNight, *, fixture: bool, phase: str) -> dict:
+SETUP_NOTICE = (
+    'Declared teaching setup only, not a complete run configuration.'
+    ' Private component edits, prompts and model settings are not exported;'
+    ' this does not establish deterministic replay or empirical validity.'
+)
+
+
+def setup_text(account: dict) -> str:
+  """Human-readable provenance for both public HTML and the SVG description."""
+  setup = account.get('declared_setup')
+  if setup is None:
+    return 'Setup provenance was not supplied. ' + SETUP_NOTICE
+  return (
+      f"Recipe: {setup['recipe']}. Actor prefab: {setup['actor_logic']}. "
+      + 'Human roles: '
+      + ', '.join(setup['human_roles'])
+      + '. '
+      + f"Engine: {setup['engine']}. "
+      + f"Declared before play: {setup['fuel_consumed_before_play']} fuel"
+      ' used; '
+      + f"{setup['available_fuel_at_start']} fuel initially available. "
+      + SETUP_NOTICE
+  )
+
+
+def document(
+    world: game.StormNight,
+    *,
+    fixture: bool,
+    phase: str,
+    manifest: Mapping | None = None,
+) -> dict:
   """Project an explicit public allowlist from the standard spectator view."""
   public = world.view('spectator')
   epilogue = public['epilogue']
   return {
       'schema': 'bellwether-public-account/v1',
       'scope': 'public',
+      'setup_notice': SETUP_NOTICE,
+      'declared_setup': (
+          {
+              key: copy.deepcopy(manifest[key])
+              for key in (
+                  'recipe',
+                  'actor_logic',
+                  'human_roles',
+                  'engine',
+                  'fuel_total_including_preconsumed',
+                  'fuel_consumed_before_play',
+                  'available_fuel_at_start',
+                  'evidence_class',
+              )
+          }
+          if manifest is not None
+          else None
+      ),
       'backend': 'fixture' if fixture else 'live',
       'status': (
           'completed'
@@ -210,6 +261,8 @@ def render_html(account: dict) -> str:
       + escape(account['watch'])
       + '</p><p>'
       + escape(account['notice'])
+      + '</p><h2>Declared setup</h2><p>'
+      + escape(setup_text(account))
       + '</p><h2>Public timeline</h2><ol>'
       + events
       + '</ol><h2>Recorded material consequences</h2>'
@@ -219,12 +272,17 @@ def render_html(account: dict) -> str:
 
 
 def export(
-    world: game.StormNight, *, fixture: bool, phase: str, format_name: str
+    world: game.StormNight,
+    *,
+    fixture: bool,
+    phase: str,
+    format_name: str,
+    manifest: Mapping | None = None,
 ) -> dict:
   """Return artifact content without transport/session envelope identifiers."""
   if format_name not in ('json', 'html', 'svg'):
     raise ops.OperationError('invalid_format', 'Choose json, html or svg.')
-  account = document(world, fixture=fixture, phase=phase)
+  account = document(world, fixture=fixture, phase=phase, manifest=manifest)
   return {
       'filename': 'bellwether-public-account.' + format_name,
       'media_type': (
@@ -237,7 +295,9 @@ def export(
       'content': (
           json.dumps(account, ensure_ascii=False, indent=2) + '\n'
           if format_name == 'json'
-          else public_figure.render(account)
+          else public_figure.render(
+              account, setup_description=setup_text(account)
+          )
           if format_name == 'svg'
           else render_html(account)
       ),

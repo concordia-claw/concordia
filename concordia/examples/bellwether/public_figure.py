@@ -34,7 +34,7 @@ _HOLDERS = ('Generator', 'Nell', 'Ivo', 'Used')
 _STATES = ('Not resolved', 'Unserved', 'Served')
 
 
-def render(account: dict) -> str:
+def render(account: dict, *, setup_description: str = '') -> str:
   """Return an accessible self-contained SVG from the public projection only."""
   records = account['accounting']['services']
   cells = []
@@ -68,7 +68,7 @@ def render(account: dict) -> str:
       + account['watch']
       + '. Public recorded accounting only, not predictions or a saved game.'
   )
-  description = provenance + ' '
+  description = provenance + ' ' + setup_description + ' '
   description += ' '.join(
       watch
       + ': '
@@ -144,8 +144,17 @@ def render(account: dict) -> str:
     )
     for i, amount in enumerate(fuel):
       stocks.text(i, amount + 0.1, str(amount), ha='center', va='bottom')
+    setup = account.get('declared_setup')
+    setup_caption = (
+        f"Recipe: {setup['recipe']} · {setup['actor_logic']} actors\n"
+        f"Initially available: {setup['available_fuel_at_start']} fuel; "
+        f"pre-used: {setup['fuel_consumed_before_play']}\n"
+        if setup
+        else 'Setup provenance not supplied\n'
+    )
     figure.supxlabel(
-        'Source: '
+        setup_caption
+        + 'Source: '
         + account['schema']
         + '\nRecorded outcomes only · not predictions or a saved game',
         fontsize=10,
