@@ -206,3 +206,9 @@ and injected-policy regressions accompany both advertised configurations.
 See [MULTIPLAYER.md](MULTIPLAYER.md) for optional host-approved Coordinator/Nell
 play, private role journals, Android controls, and the HTTPS boundary. Omit
 `--multiplayer` for the unchanged single-human game.
+
+## Optional voice
+
+[Local voice controls](VOICE.md) add opt-in spoken observations and editable
+dictation on supported devices, retaining full text fallback. Android on-device
+recognition is not assumed.

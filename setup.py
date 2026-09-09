@@ -70,6 +70,7 @@ setuptools.setup(
             'README.md',
             'GAME.md',
             'MULTIPLAYER.md',
+            'VOICE.md',
         ],
         'concordia.examples.astral_canticle': [
             'static/*',

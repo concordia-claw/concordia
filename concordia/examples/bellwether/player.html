@@ -37,6 +37,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 #journal{overscroll-behavior:contain}#role-wait{font-size:1.05rem;color:#edc984}
 @media(max-width:460px){#composer{padding:12px}#map button{overflow-wrap:anywhere;font-size:.85rem}#cast{grid-template-columns:1fr}.card p{font-size:.95rem}body{padding-bottom:84px}th,td{overflow-wrap:anywhere}#epilogue{padding:12px}table{table-layout:fixed}#map{gap:16px 12px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+#voice label{display:block;margin:14px 0}#voice input{width:24px;height:24px;min-height:24px;vertical-align:middle}#voice button{min-height:48px;margin:5px 4px 5px 0}#transcript{min-height:100px}
 </style></head><body>
 <section id="join" hidden><h2>Join the night</h2><p>Choose a role and ask the host to approve this browser. Reloading keeps your place. No private information is shared until approval.</p><form id="join-form"><label for="join-name">Your name for the host</label><input id="join-name" maxlength="80" autocomplete="nickname" required><label for="join-role">Role</label><select id="join-role"><option>Coordinator</option><option>Nell</option><option value="spectator">Spectator · public events only</option></select><button id="join-submit">Request to join</button></form><p id="join-status" role="status"></p></section>
 <div id="play"><header><p id="role-badge"></p><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · AI residents scripted</span>
@@ -46,6 +47,12 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <div id="map" aria-label="Locations around Bellwether harbor"></div><p id="location" class="subtle">Choose a place. Looking around does not move time.</p>
 <button id="all-cast" type="button">All residents</button><div id="cast"></div></section>
 <section id="epilogue" hidden aria-labelledby="dawn-title"><h2 id="dawn-title">Dawn at Bellwether</h2><div id="outcome"></div><div id="responses"></div></section>
+<details id="voice"><summary>Voice options · optional, on-device only</summary>
+<label><input id="voice-enabled" type="checkbox"> Enable voice controls for this page</label>
+<p class="subtle">Text always works. Dictation is editable and is never sent automatically. Microphone and local language support are checked only when you choose Dictate. No remote speech fallback is used.</p>
+<button id="listen" type="button" disabled>Read latest observation</button> <button id="stop-audio" type="button" disabled>Stop audio</button><p id="latest-spoken" class="subtle"></p>
+<button id="dictate" type="button" disabled>Dictate on this device</button> <button id="finish-dictation" type="button" disabled>Finish dictation</button> <button id="cancel-dictation" type="button" disabled>Cancel dictation</button>
+<label for="transcript">Transcript · review and edit before adding</label><textarea id="transcript" placeholder="Your speech transcript stays here until you add it to your action draft."></textarea><button id="use-transcript" type="button" disabled>Add to action draft</button><p id="voice-status" role="status">Voice is off. Text always works.</p></details>
 <h2>The night’s account</h2><div id="journal" aria-live="polite"></div>
 <details id="agreements" hidden><summary>Commitments and institutions</summary><div id="commitments"></div><div id="institutions"></div></details>
 <details><summary>Your available context</summary><pre id="context"></pre></details>
@@ -74,10 +81,109 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('wait').onclick=()=>suggest(current?.result.night?'wait':'Wait and listen.');
  $('all-cast').onclick=()=>{picked=null;render(current)};
  function text(parent,tag,value,cls){const el=document.createElement(tag);el.textContent=value;if(cls)el.className=cls;parent.append(el);return el}
+ // Optional presentation voice; game inputs remain text, never microphone data.
+ const voice=(() => {
+  const synth=window.speechSynthesis;
+  const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const language=navigator.language||'en-US';
+  let enabled=false,scope='',canDictate=false,latest='',recognition=null,generation=0,spoken=null,checking=false;
+  const status=message=>$('voice-status').textContent=message;
+  const localVoices=()=>synth?.getVoices().filter(v=>v.localService===true)||[];
+  function controls(){
+   const available=enabled&&Boolean(scope);
+   $('dictate').disabled=!available||!canDictate||Boolean(recognition)||checking;
+   $('finish-dictation').disabled=!recognition;
+   $('cancel-dictation').disabled=!recognition&&!checking;
+   $('use-transcript').disabled=!available||!canDictate||!$('transcript').value.trim();
+   $('listen').disabled=!available||!latest||!localVoices().length||!window.SpeechSynthesisUtterance;
+   $('stop-audio').disabled=!spoken;
+  }
+  function stopSpeech(){
+   if(spoken){spoken.onend=spoken.onerror=null;spoken=null;synth?.cancel();}
+   controls();
+  }
+  function cancelDictation(clear=true){
+   generation++;checking=false;
+   if(recognition){const old=recognition;recognition=null;old.onresult=old.onend=old.onerror=null;old.abort();}
+   if(clear)$('transcript').value='';
+   controls();
+  }
+  function reset(){
+   cancelDictation();stopSpeech();status(enabled?'Audio stopped. Text controls remain available.':'Voice is off. Text always works.');
+  }
+  $('voice-enabled').onchange=()=>{
+   enabled=$('voice-enabled').checked;reset();controls();
+   if(enabled)status('Choose Dictate or Read latest observation. Only on-device speech is used; nothing plays automatically.');
+  };
+  $('transcript').oninput=controls;
+  $('cancel-dictation').onclick=()=>{cancelDictation();status('Dictation cancelled. Your action draft is unchanged.')};
+  $('finish-dictation').onclick=()=>{recognition?.stop();status('Finishing dictation… review the transcript before adding it.')};
+  $('use-transcript').onclick=()=>{
+   if(!enabled||!canDictate||!scope)return;
+   const transcript=$('transcript').value.trim();if(!transcript)return;
+   const draft=$('action');draft.value+=(draft.value&&!/\s$/.test(draft.value)?' ':'')+transcript;
+   draft.oninput();cancelDictation();status('Transcript added to your draft. Edit it, then choose Send action.');draft.focus();
+  };
+  $('dictate').onclick=async()=>{
+   if(!enabled||!canDictate||!scope||recognition||checking)return;
+   stopSpeech();cancelDictation();const attempt=generation,expected=scope;checking=true;status('Checking for an installed on-device language…');controls();
+   const stillHere=()=>attempt===generation&&expected===scope&&enabled&&canDictate;
+   try{
+    if(!Recognition||typeof Recognition.available!=='function'||!('processLocally' in Recognition.prototype))
+     throw new Error('On-device dictation is unavailable in this browser. Please type instead.');
+    const availability=await Recognition.available({langs:[language],processLocally:true});
+    if(!stillHere())return;
+    if(availability!=='available')throw new Error('An on-device '+language+' language pack is not installed. Please type instead; no remote fallback or download was started.');
+    const rec=new Recognition();rec.processLocally=true;
+    if(rec.processLocally!==true)throw new Error('On-device processing could not be enabled. Please type instead.');
+    recognition=rec;rec.lang=language;rec.interimResults=false;rec.continuous=true;rec.maxAlternatives=1;
+    rec.onresult=event=>{
+     if(!stillHere()||recognition!==rec)return;
+     for(let i=event.resultIndex;i<event.results.length;i++)if(event.results[i].isFinal){
+      const value=event.results[i][0].transcript;
+      $('transcript').value+=($('transcript').value?' ':'')+value;
+     }
+     status('Review your transcript. It has not been added or sent.');controls();
+    };
+    rec.onerror=event=>{
+     if(!stillHere())return;
+     recognition=null;checking=false;generation++;rec.onresult=rec.onend=rec.onerror=null;rec.abort();
+     status(event.error==='not-allowed'?'Microphone permission was declined. Please type instead.':'Dictation stopped. Review any transcript or continue typing.');controls();
+    };
+    rec.onend=()=>{if(!stillHere())return;recognition=null;status('Dictation finished. Edit the transcript, then Add to draft.');controls()};
+    rec.start();status('Listening on this device… Finish or Cancel when ready.');
+   }catch(error){if(stillHere()){cancelDictation(false);status(error.message||'Dictation unavailable. Please type instead.')}}
+   finally{if(attempt===generation){checking=false;controls()}}
+  };
+  $('listen').onclick=()=>{
+   if(!enabled||!scope||!latest||!window.SpeechSynthesisUtterance)return;
+   const voices=localVoices(),chosen=voices.find(v=>v.lang===language)||voices.find(v=>v.lang.split('-')[0]===language.split('-')[0])||voices[0];
+   if(!chosen){status('No local speaking voice is available. The observation remains readable.');return}
+   stopSpeech();cancelDictation(false);
+   const utterance=new SpeechSynthesisUtterance(latest);utterance.voice=chosen;utterance.lang=chosen.lang;spoken=utterance;
+   utterance.onend=()=>{if(spoken===utterance){spoken=null;status('Reading finished.');controls()}};
+   utterance.onerror=()=>{if(spoken===utterance){spoken=null;status('Audio unavailable. Read the observation in the journal.');controls()}};
+   synth.speak(utterance);status('Reading your latest visible observation. Stop audio at any time.');controls();
+  };
+  $('stop-audio').onclick=()=>{stopSpeech();status('Audio stopped.')};
+  synth?.addEventListener('voiceschanged',controls);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)reset()});
+  window.addEventListener('pagehide',reset);
+  return {
+   update(nextScope,allowed,observation){
+    if(nextScope!==scope){scope=nextScope;reset();}
+    canDictate=allowed;latest=observation||'';
+    $('latest-spoken').textContent=!localVoices().length?'No local speaking voice is available here. Read the journal below.':latest?'Read aloud uses the latest observation visible in your journal.':'No observation available yet.';
+    controls();
+   },
+   disconnect(){scope='';canDictate=false;latest='';reset();controls()}
+  };
+ })();
+
  function render(data){
   if(!data||(current&&data.revision<current.revision))return;current=data;
   const state=data.result;
-  if(state.lobby){$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
+  if(state.lobby){voice.disconnect();$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
    for(const id of ['context','journal','prompt','outcome','responses'])$(id).replaceChildren();
    if(identity){$('action').value='';retry=null;identity='';}ownJoin();return;}
   $('join').hidden=true;$('play').hidden=false;
@@ -119,6 +225,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   const journal=$('journal'),atEnd=journal.scrollTop+ journal.clientHeight>=journal.scrollHeight-40;
   journal.replaceChildren();
   const entries=night?night.journal:human.entries;
+  voice.update(connected?identity+':'+(human.pending?.id||'waiting'):'',Boolean(connected&&human.pending&&!spectator),entries.at(-1)?.text||'');
   for(const entry of entries){
    const p=text(journal,'p','','story'+(entry.recipients?.length<5?' private':''));
    if(night)text(p,'small',(entry.watch<3?['Dusk','High Tide','Before Dawn'][entry.watch]:'Dawn')+(entry.recipients.length<5?' · Private':''));
@@ -164,6 +271,6 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('begin').onclick=()=>dispatch('game.begin',{});
  const stream=new EventSource(api('events'));
  stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
- stream.onerror=()=>{connected=false;$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
+ stream.onerror=()=>{connected=false;voice.disconnect();$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
 })();
 </script></body></html>
