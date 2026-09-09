@@ -1,8 +1,8 @@
 # Optional local visual notes
 
 This is **model image input**, separate from the public SVG presentation and
-browser speech controls. It is an explicit local command-line aid, not a player
-upload endpoint. The result is a draft for you to inspect and edit, never an
+browser speech controls. The model call is an explicit local command-line aid, not a player
+image-upload endpoint. The result is a draft for you to inspect and edit, never an
 automatic observation, game action, consent decision, or source of inventory.
 
 ## Use an installed local vision model
@@ -69,3 +69,32 @@ instructions; nothing here executes them. Review against the image before any
 reuse. No broad image/audio understanding, physical Android image workflow,
 automatic actor perception, or social validity follows from this tool.
 For text-only play or unsupported models, keep using the normal player input.
+
+## Review a note in the player page
+
+On your own pending turn, open **Review an image note · optional** and choose
+the generated visual-note JSON. The native file reader reads it in your browser:
+the file, image, question and source metadata are not uploaded to the game.
+The page verifies the bounded file structure, not the truth of its contents or
+its claimed model/source. Source details are available separately from the
+editable description.
+
+Edit the description, then choose **Add reviewed text to action draft**. This
+appends the literal text without replacing your existing draft or submitting it.
+Review the complete command and, for a resident role, your selected decision.
+Only the existing **Send action** submits anything. Long text may need trimming
+to satisfy the existing action input limit; the importer never silently truncates.
+
+Invalid imports preserve your draft and the previous edited review. Clear review
+cancels outstanding file reads and leaves your action draft unchanged. A newer
+file, role/turn change, connection loss or reload discards old review data and
+late responses. Only text you explicitly added to the action draft uses the
+existing role-scoped draft recovery. Spectators and browsers without a pending
+controlled turn cannot use the review controls.
+
+Chromium checks cover narrow portrait/landscape, unchanged-SSE focus/selection,
+UTF-8/format/size errors, cancel/replacement of delayed reads, approved Nell's
+private review, revocation, reconnect and explicit Send. These are emulated
+browser checks with synthetic inboxes and no simulation or live image calls,
+not physical Android validation. Image selection/inference from the phone is
+not implemented by this JSON review step.

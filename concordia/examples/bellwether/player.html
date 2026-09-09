@@ -39,6 +39,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 @media(max-width:460px){#composer{padding:12px}#map button{overflow-wrap:anywhere;font-size:.85rem}#cast{grid-template-columns:1fr}.card p{font-size:.95rem}body{padding-bottom:84px}th,td{overflow-wrap:anywhere}#epilogue{padding:12px}table{table-layout:fixed}#map{gap:16px 12px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 #voice label{display:block;margin:14px 0}#voice input{width:24px;height:24px;min-height:24px;vertical-align:middle}#voice button{min-height:48px;margin:5px 4px 5px 0}#transcript{min-height:100px}
+#visual-note input{display:block;max-width:100%;min-height:44px;margin:12px 0}#visual-note button{min-height:48px;margin:6px 4px 6px 0}#note-provenance,#note-summary{white-space:pre-wrap;overflow-wrap:anywhere}
 </style></head><body>
 <section id="join" hidden><h2>Join the night</h2><p>Choose a role and ask the host to approve this browser. Reloading keeps your place. No private information is shared until approval.</p><form id="join-form"><label for="join-name">Your name for the host</label><input id="join-name" maxlength="80" autocomplete="nickname" required><label for="join-role">Role</label><select id="join-role"><option>Coordinator</option><option>Nell</option><option value="spectator">Spectator · public events only</option></select><button id="join-submit">Request to join</button></form><p id="join-status" role="status"></p></section>
 <div id="play"><header><p id="role-badge"></p><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · AI residents scripted</span>
@@ -66,6 +67,11 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <button id="export-svg" type="button">Download public figure</button>
 <p id="export-status" role="status"></p></section>
 <section id="composer"><h2 id="prompt">Waiting to begin</h2><p id="role-wait" role="status"></p><p id="turn-note" class="subtle"></p><label id="decision-label" for="decision" hidden>Your decision</label><select id="decision" hidden></select><div id="choices"></div>
+<details id="visual-note" hidden><summary>Review an image note · optional</summary>
+<p>Open a visual-note JSON made with the local image tool. The file is read only in this page, not uploaded. Treat its description as a draft, not verified facts.</p>
+<label for="note-file">Choose a visual-note JSON file</label><input id="note-file" type="file" accept=".json,application/json" disabled>
+<p id="note-summary" class="subtle"></p><details id="note-details" hidden><summary>Source details</summary><p id="note-provenance" class="subtle"></p></details><label for="note-text">Review and edit the description</label><textarea id="note-text" disabled></textarea>
+<button id="use-note" type="button" disabled>Add reviewed text to action draft</button><button id="clear-note" type="button" disabled>Clear review</button><p id="note-status" role="status">Nothing is sent automatically.</p></details>
 <form id="action-form"><label for="action">What do you do or say?</label><textarea id="action" placeholder="Choose a suggestion, or write your own words…"></textarea>
 <p id="preview-result" role="status"></p>
 <p><button type="button" id="preview" hidden disabled>Check interpretation · free</button> <button type="button" id="wait">Suggest waiting</button> <button id="act" disabled>Send action</button></p></form></section>
@@ -93,9 +99,63 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('action').value='';
  $('action').oninput=()=>{sessionStorage.setItem(draftKey,$('action').value);retry=null;updatePreview()};
  function suggest(words){$('action').value=words;$('action').oninput();$('action').focus()}
+ function appendToDraft(words){const draft=$('action');draft.value+=(draft.value&&!/\s$/.test(draft.value)?' ':'')+words;draft.oninput();draft.focus()}
  $('wait').onclick=()=>suggest(current?.result.night?'wait':'Wait and listen.');
  $('all-cast').onclick=()=>{picked=null;render(current)};
  function text(parent,tag,value,cls){const el=document.createElement(tag);el.textContent=value;if(cls)el.className=cls;parent.append(el);return el}
+
+ // Local file review is not an image upload or a game operation.
+ const visualNotes=(() => {
+  let scope='',generation=0,loading=false,canUse=false;
+  const status=message=>$('note-status').textContent=message;
+  const bounded=(value,max)=>typeof value==='string'&&value.trim()&&Array.from(value).length<=max;
+  function controls(){
+   $('visual-note').hidden=!scope;
+   $('note-file').disabled=!scope||!canUse;
+   $('note-text').disabled=!scope||!canUse||loading;
+   $('use-note').disabled=!scope||!canUse||loading||!$('note-text').value.trim();
+   $('clear-note').disabled=!scope||(!loading&&!$('note-text').value&&!$('note-provenance').textContent);
+  }
+  function clear(){
+   generation++;loading=false;$('note-file').value='';$('note-text').value='';$('note-provenance').textContent='';$('note-summary').textContent='';$('note-details').hidden=true;$('note-details').open=false;
+   status('Review cleared. Your action draft is unchanged.');controls();
+  }
+  function validate(data){
+   if(!data||data.schema!=='bellwether.visual-note.v1'||data.kind!=='model_observation_draft'||data.review!=='required_before_use'||data.provider!=='local_ollama'
+    ||!bounded(data.text,16000)||!bounded(data.question,2000)||!bounded(data.model,256)
+    ||!data.source||!/^[a-f0-9]{64}$/.test(data.source.transmitted_sha256||''))
+     throw new Error('Choose a valid visual-note v1 JSON from the local image tool.');
+   return data;
+  }
+  $('note-file').onchange=async()=>{
+   if(!scope||!canUse)return;const file=$('note-file').files[0];if(!file)return;
+   const expected=scope,attempt=++generation;loading=true;status('Reading the selected note locally…');controls();
+   const stillHere=()=>attempt===generation&&scope===expected&&canUse;
+   try{
+    if(file.size>128*1024)throw new Error('Note exceeds the 128 KiB limit.');
+    const bytes=await file.arrayBuffer();if(!stillHere())return;
+    const data=validate(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)));
+    if(!stillHere())return;
+    $('note-text').value=data.text;
+    $('note-summary').textContent=['Reported model: '+data.model,'Question: '+data.question,data.stop_reason==='length'?'The model reached its limit; this description may be incomplete.':''].filter(Boolean).join('\n');
+    $('note-provenance').textContent='Transmitted image hash: '+data.source.transmitted_sha256+'\nReview against the original image; file provenance is not verified by this page.';$('note-details').hidden=false;
+    status('Review and edit the text. Adding it only changes your local action draft.');
+   }catch(error){
+    if(stillHere())status('Cannot read this note. Your draft and previous review are kept. '+(error instanceof SyntaxError||error instanceof TypeError?'Use a UTF-8 visual-note JSON.':error.message));
+   }finally{if(attempt===generation){loading=false;controls()}}
+  };
+  $('note-text').oninput=controls;
+  $('clear-note').onclick=clear;
+  $('use-note').onclick=()=>{
+   if(!scope||!canUse||loading||!$('note-text').value.trim())return;
+   appendToDraft($('note-text').value);clear();status('Added to your draft. Review your words and decision, then choose Send action.');
+  };
+  return {
+   update(nextScope,allowed){if(scope!==nextScope){scope=nextScope;clear();}canUse=allowed;controls()},
+   disconnect(){scope='';canUse=false;clear()}
+  };
+ })();
+
  // Optional presentation voice; game inputs remain text, never microphone data.
  const voice=(() => {
   const synth=window.speechSynthesis;
@@ -136,8 +196,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   $('use-transcript').onclick=()=>{
    if(!enabled||!canDictate||!scope)return;
    const transcript=$('transcript').value.trim();if(!transcript)return;
-   const draft=$('action');draft.value+=(draft.value&&!/\s$/.test(draft.value)?' ':'')+transcript;
-   draft.oninput();cancelDictation();status('Transcript added to your draft. Edit it, then choose Send action.');draft.focus();
+   appendToDraft(transcript);cancelDictation();status('Transcript added to your draft. Edit it, then choose Send action.');
   };
   $('dictate').onclick=async()=>{
    if(!enabled||!canDictate||!scope||recognition||checking)return;
@@ -198,7 +257,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  function render(data){
   if(!data||(current&&data.revision<current.revision))return;current=data;
   const state=data.result;
-  if(state.lobby){rendered.clear();journalRows=[];voice.disconnect();invalidatePreview();previewScope='';$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
+  if(state.lobby){rendered.clear();journalRows=[];voice.disconnect();visualNotes.disconnect();invalidatePreview();previewScope='';$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
    for(const id of ['context','journal','prompt','outcome','responses'])$(id).replaceChildren();
    if(identity){$('action').value='';retry=null;identity='';}ownJoin();return;}
   $('join').hidden=true;$('play').hidden=false;
@@ -254,6 +313,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
   const journal=$('journal'),atEnd=journal.scrollTop+ journal.clientHeight>=journal.scrollHeight-40;
   const entries=night?night.journal:human.entries;
   voice.update(connected?identity+':'+(human.pending?.id||'waiting'):'',Boolean(connected&&human.pending&&!spectator),entries.at(-1)?.text||'');
+  visualNotes.update(connected&&human.pending&&!spectator?identity+':'+human.pending.id:'',Boolean(connected&&!sending&&human.pending&&!spectator));
   // Append-only delivery preserves selection. Changed recipient projections rebuild.
   const rows=entries.map(entry=>JSON.stringify([Boolean(night),entry]));
   if(journalRows.length>rows.length||journalRows.some((row,index)=>row!==rows[index])){journal.replaceChildren();journalRows=[];}
@@ -366,6 +426,6 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('begin').onclick=()=>dispatch('game.begin',{});
  const stream=new EventSource(api('events'));
  stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
- stream.onerror=()=>{connected=false;voice.disconnect();invalidatePreview();$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
+ stream.onerror=()=>{connected=false;voice.disconnect();visualNotes.disconnect();invalidatePreview();$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
 })();
 </script></body></html>
