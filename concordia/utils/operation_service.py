@@ -78,6 +78,12 @@ class Operation:
   handler: Callable[[dict[str, Any]], Any]
   audiences: tuple[str, ...] = ('developer',)
   mutation: bool = False
+  audience_handlers: Mapping[str, Callable[[dict[str, Any]], Any]] | None = None
+
+  def invoke(self, audience: str, arguments: dict[str, Any]) -> Any:
+    """Select a server-bound handler; arguments cannot select another actor."""
+    handler = (self.audience_handlers or {}).get(audience, self.handler)
+    return handler(arguments)
 
   def schema(self) -> dict[str, Any]:
     return {
@@ -110,8 +116,10 @@ class OperationService:
       branch_id: str = 'initial',
       session_id: str | None = None,
       retry_capacity: int = 4096,
+      audience_resolver: Callable[[str], str] | None = None,
   ):
     self.lock = threading.RLock()
+    self.audience_resolver = audience_resolver or (lambda principal: principal)
     self.references = {
         'project_id': project_id,
         'branch_id': branch_id,
@@ -137,6 +145,7 @@ class OperationService:
 
   def discover(self, audience: str) -> dict:
     with self.lock:
+      audience = self.audience_resolver(audience)
       return self._envelope({
           'operations': [
               op.schema()
@@ -154,6 +163,7 @@ class OperationService:
 
   def snapshot(self, audience: str) -> dict:
     with self.lock:
+      audience = self.audience_resolver(audience)
       if audience not in self._views:
         raise OperationError('forbidden', 'No view for this audience.')
       return self._envelope(self._views[audience]())
@@ -194,6 +204,8 @@ class OperationService:
   def dispatch(self, audience: str, request: dict) -> dict:
     """Validate before execution; the listener fixes the audience."""
     with self.lock:
+      principal = audience
+      audience = self.audience_resolver(principal)
       if not isinstance(request, dict) or set(request) - {
           'operation',
           'arguments',
@@ -222,7 +234,7 @@ class OperationService:
       for name, parameter in op.parameters.items():
         parameter.validate(name, args[name])
       if not op.mutation:
-        return self._envelope(op.handler(copy.deepcopy(args)))
+        return self._envelope(op.invoke(audience, copy.deepcopy(args)))
       key = request.get('retry_key')
       if not isinstance(key, str) or not 1 <= len(key) <= 128:
         raise OperationError(
@@ -230,7 +242,7 @@ class OperationService:
             'Provide a unique retry_key (1–128 characters).',
         )
       fingerprint = json.dumps(
-          [audience, request], sort_keys=True, ensure_ascii=False
+          [principal, audience, request], sort_keys=True, ensure_ascii=False
       )
       if key in self._retries:
         original, result = self._retries[key]
@@ -259,7 +271,7 @@ class OperationService:
         )
       self._origin = {'origin': audience, 'operation_id': key}
       try:
-        result = self._envelope(op.handler(copy.deepcopy(args)))
+        result = self._envelope(op.invoke(audience, copy.deepcopy(args)))
       finally:
         self._origin = {}
       self._retries[key] = (fingerprint, result)

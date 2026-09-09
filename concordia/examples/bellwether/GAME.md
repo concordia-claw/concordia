@@ -199,3 +199,10 @@ ConcatAct policy. `basic.Entity` now supports `extra_components` and
 This supplies each resident’s account, affiliations, and scenario instructions
 without copying the basic prefab or silently ignoring configuration. Default
 and injected-policy regressions accompany both advertised configurations.
+
+
+## Two human roles
+
+See [MULTIPLAYER.md](MULTIPLAYER.md) for optional host-approved Coordinator/Nell
+play, private role journals, Android controls, and the HTTPS boundary. Omit
+`--multiplayer` for the unchanged single-human game.

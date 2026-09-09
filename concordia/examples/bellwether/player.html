@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Last Light at Bellwether</title><style>
 :root{color-scheme:dark;font:17px/1.6 system-ui;background:#091721;color:#f2e6cf;--muted:#b6c8cb;--gold:#edc984}
-*{box-sizing:border-box}body{margin:0 auto;max-width:940px;padding:26px 18px 60px}
+*{box-sizing:border-box}body{overflow-wrap:anywhere;margin:0 auto;max-width:940px;padding:26px 18px 60px}
 h1{font:clamp(2.4rem,7vw,4.3rem)/1.1 Georgia,serif;margin:18px 0 10px;max-width:720px}
 h2{font:1.5rem Georgia,serif;margin-top:32px}h3{font:1.2rem Georgia,serif}
 .subtle,small{color:var(--muted)}.badge{border:1px solid #998d6b;padding:5px 12px;border-radius:30px;font-size:.8rem;display:inline-block}
@@ -26,8 +26,20 @@ textarea{width:100%;min-height:116px;padding:12px;background:#102732;color:inher
 table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{text-align:left;border-bottom:1px solid #42606b;padding:7px}
 details{margin:20px 0}summary{cursor:pointer;color:var(--muted)}#context{max-height:350px;overflow:auto}#prompt{margin:28px 0 8px}
 [hidden]{display:none!important}@media(max-width:460px){body{padding:20px 14px 40px}#map{gap:20px 12px;padding:30px 12px}#cast{grid-template-columns:1fr 1fr}.card{padding:10px}.card p{font-size:.8rem}button{min-height:44px}}
+
+#join{background:#132a35;border:1px solid #638084;border-radius:12px;padding:20px;margin-top:20px}
+#join label,#join input,#join select{display:block;width:100%;margin:8px 0}
+input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819ca1;border-radius:8px;padding:12px;min-height:48px;max-width:100%}
+#role-badge{font-weight:700;color:var(--gold)}#jump-action{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));right:16px;z-index:5;background:var(--gold);color:#15222a;box-shadow:0 4px 20px #0008}
+#composer{scroll-margin:16px;background:#0f2530;border:1px solid #416570;padding:16px;border-radius:12px;margin-top:24px}
+#action-form>p{position:relative;background:#0f2530;padding:10px 0;margin-bottom:0}
+#action{max-height:40dvh}#act{min-width:136px}#choices button,.card button{min-height:48px}
+#journal{overscroll-behavior:contain}#role-wait{font-size:1.05rem;color:#edc984}
+@media(max-width:460px){#composer{padding:12px}#map button{overflow-wrap:anywhere;font-size:.85rem}#cast{grid-template-columns:1fr}.card p{font-size:.95rem}body{padding-bottom:84px}th,td{overflow-wrap:anywhere}#epilogue{padding:12px}table{table-layout:fixed}#map{gap:16px 12px}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 </style></head><body>
-<header><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · scripted residents</span>
+<section id="join" hidden><h2>Join the night</h2><p>Choose a role and ask the host to approve this browser. Reloading keeps your place. No private information is shared until approval.</p><form id="join-form"><label for="join-name">Your name for the host</label><input id="join-name" maxlength="80" autocomplete="nickname" required><label for="join-role">Role</label><select id="join-role"><option>Coordinator</option><option>Nell</option><option value="spectator">Spectator · public events only</option></select><button id="join-submit">Request to join</button></form><p id="join-status" role="status"></p></section>
+<div id="play"><header><p id="role-badge"></p><span class="badge" id="watch">Dusk</span><span class="badge" id="fixture" hidden>Fixture · AI residents scripted</span>
 <h1>Last Light<br>at Bellwether</h1><p class="subtle">An island community. One stormy night.</p>
 <p id="connection" role="status">Connecting…</p><p id="opening"></p><button id="begin" hidden>Begin the night</button></header>
 <section aria-labelledby="map-title"><h2 id="map-title">The island</h2><div id="resources"></div><p id="supply-note" class="subtle"></p>
@@ -37,28 +49,48 @@ details{margin:20px 0}summary{cursor:pointer;color:var(--muted)}#context{max-hei
 <h2>The night’s account</h2><div id="journal" aria-live="polite"></div>
 <details id="agreements" hidden><summary>Commitments and institutions</summary><div id="commitments"></div><div id="institutions"></div></details>
 <details><summary>Your available context</summary><pre id="context"></pre></details>
-<section id="composer"><h2 id="prompt">Waiting to begin</h2><p id="turn-note" class="subtle"></p><div id="choices"></div>
+<section id="composer"><h2 id="prompt">Waiting to begin</h2><p id="role-wait" role="status"></p><p id="turn-note" class="subtle"></p><label id="decision-label" for="decision" hidden>Your decision</label><select id="decision" hidden></select><div id="choices"></div>
 <form id="action-form"><label for="action">What do you do or say?</label><textarea id="action" placeholder="Choose a suggestion, or write your own words…"></textarea>
 <p><button type="button" id="wait">Suggest waiting</button> <button id="act" disabled>Send action</button></p></form></section>
-<p id="error" role="alert"></p>
+</div><button id="jump-action" type="button" hidden>Go to your action</button><p id="error" role="alert"></p>
 <script>
 (() => {
- const $=id=>document.getElementById(id);let current,retry,sending=false,picked,connected=false;
+ const $=id=>document.getElementById(id);let current,retry,sending=false,picked,connected=false,identity='',draftKey='bellwether-draft';
+ const api=name=>new URL('api/'+name,location.origin+location.pathname.replace(/\/?$/,'/')).href;
+ const announceError=message=>{$('error').textContent=message};
+ $('jump-action').onclick=()=>{$('composer').scrollIntoView({block:'start',behavior:'auto'});$('action').focus({preventScroll:true})};
+ $('join-form').onsubmit=async e=>{e.preventDefault();$('join-submit').disabled=true;
+  try{const response=await fetch(api('join'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({label:$('join-name').value,role:$('join-role').value})});const result=await response.json();if(!response.ok)throw new Error(result.error.message);$('join-status').textContent='Waiting for host approval as '+result.requested_role;}
+  catch(error){announceError(error.message)}finally{$('join-submit').disabled=false}
+ };
+ async function ownJoin(){try{const response=await fetch(api('session'));if(response.ok){const own=await response.json();if(own.requested_role)$('join-status').textContent='Waiting for host approval as '+own.requested_role;}}catch{}}
+
  const labels=['Harbor beacon','Storm shelter','Cooperative cold store','Generator yard'];
  const facility={'Harbor beacon':'beacon','Storm shelter':'shelter','Cooperative cold store':'cold store'};
  const descriptions={Mara:'Harbor master · boats and safe passage',Nell:'Cooperative custodian · reserves and livelihoods',Ivo:'Engineer · repairs and working conditions',Sam:'Shelter steward · displaced residents'};
- $('action').value=sessionStorage.getItem('bellwether-draft')||'';
- $('action').oninput=()=>{sessionStorage.setItem('bellwether-draft',$('action').value);retry=null};
+ $('action').value='';
+ $('action').oninput=()=>{sessionStorage.setItem(draftKey,$('action').value);retry=null};
  function suggest(words){$('action').value=words;$('action').oninput();$('action').focus()}
  $('wait').onclick=()=>suggest(current?.result.night?'wait':'Wait and listen.');
  $('all-cast').onclick=()=>{picked=null;render(current)};
  function text(parent,tag,value,cls){const el=document.createElement(tag);el.textContent=value;if(cls)el.className=cls;parent.append(el);return el}
  function render(data){
   if(!data||(current&&data.revision<current.revision))return;current=data;
-  const state=data.result,world=state.scenario,human=state.human,night=state.night;
+  const state=data.result;
+  if(state.lobby){$('join').hidden=false;$('play').hidden=true;$('jump-action').hidden=true;
+   for(const id of ['context','journal','prompt','outcome','responses'])$(id).replaceChildren();
+   if(identity){$('action').value='';retry=null;identity='';}ownJoin();return;}
+  $('join').hidden=true;$('play').hidden=false;
+  const world=state.scenario,human=state.human,night=state.night;
+  const role=state.role||'Coordinator',spectator=role==='spectator',isResident=state.multiplayer&&role!=='Coordinator'&&!spectator;
+  const nextIdentity=data.references.session_id+':'+role;
+  if(identity!==nextIdentity){identity=nextIdentity;draftKey='bellwether-draft:'+identity;$('action').value=sessionStorage.getItem(draftKey)||'';retry=null;}
+  $('role-badge').textContent=state.multiplayer?(spectator?'Spectator · public events only':'You are '+role):'';
+  $('jump-action').hidden=!human.pending||spectator;
+
   $('fixture').hidden=!state.fixture;$('watch').textContent=night?night.watch+' · '+night.remaining+' choices remain':'Dusk · one-turn fixture';
-  $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'The account is complete':'Connected · '+(night?.next_actor&&night.next_actor!=='Coordinator'?night.next_actor+' is considering a response':human.status);
-  $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused';$('begin').disabled=!connected||sending;
+  $('connection').textContent=!connected?'Reconnecting… your draft is kept':human.finished?'The account is complete':'Connected · '+(human.pending?'Your turn':spectator?'Watching public events':night?.next_actor&&night.next_actor!==role?'Waiting for '+night.next_actor:human.status);
+  $('opening').textContent=world.opening;$('begin').hidden=!night||state.phase!=='paused'||spectator;$('begin').disabled=!connected||sending||(state.multiplayer&&!state.players_ready);if(state.multiplayer&&!state.players_ready)$('connection').textContent='Waiting for the host to approve both players';
   $('resources').replaceChildren();
   if(night){
    const stock=night.inventory;
@@ -82,7 +114,7 @@ details{margin:20px 0}summary{cursor:pointer;color:var(--muted)}#context{max-hei
   $('cast').replaceChildren();
   for(const resident of world.cast.filter(x=>!picked||x.location===picked)){
    const card=text($('cast'),'article','','card');text(card,'strong',resident.name);text(card,'p',descriptions[resident.name]||resident.role);text(card,'small',resident.location);
-   if(night&&!human.finished){const talk=text(card,'button','Discuss');talk.type='button';talk.onclick=()=>suggest('tell '+resident.name+': ');const pm=text(card,'button','Private');pm.type='button';pm.onclick=()=>suggest('message '+resident.name+': ')}
+   if(night&&!human.finished&&!isResident&&!spectator){const talk=text(card,'button','Discuss');talk.type='button';talk.onclick=()=>suggest('tell '+resident.name+': ');const pm=text(card,'button','Private');pm.type='button';pm.onclick=()=>suggest('message '+resident.name+': ')}
   }
   const journal=$('journal'),atEnd=journal.scrollTop+ journal.clientHeight>=journal.scrollHeight-40;
   journal.replaceChildren();
@@ -95,10 +127,14 @@ details{margin:20px 0}summary{cursor:pointer;color:var(--muted)}#context{max-hei
   if(atEnd)journal.scrollTop=journal.scrollHeight;
   $('context').textContent=human.pending?.context||'';
   $('prompt').textContent=human.pending?.prompt||(human.finished?'The night has ended':night?'The island is responding…':'Waiting for the next prompt');
-  $('turn-note').textContent=night?'Every valid attempt costs one choice, even a refused request. Ambiguous actions ask for clarification without an effect.':'One-turn fixture only.';
-  $('act').disabled=!connected||sending||!human.pending;$('composer').hidden=Boolean(night?.epilogue);
+  $('role-wait').textContent=isResident&&!human.pending?'Waiting for a conversation or request addressed to Nell. Other players cannot act for you.':'';
+  $('turn-note').textContent=isResident?'Choose your own decision and words. Acceptance records consent; it does not perform a transfer.':night?'Every valid attempt costs one choice, even a refused request. Ambiguous actions ask for clarification without an effect.':'One-turn fixture only.';
+  $('act').disabled=!connected||sending||!human.pending;$('composer').hidden=spectator||Boolean(night?.epilogue&&!human.pending);
+  $('decision').hidden=$('decision-label').hidden=!isResident;
+  if(isResident){const chosen=$('decision').value;$('decision').replaceChildren();for(const decision of state.decisions||['speak']){const option=text($('decision'),'option',({accept:'Accept this request',decline:'Decline',counter:'Offer different terms',revoke:'Revoke my unfulfilled commitment',speak:'Speak'})[decision]);option.value=decision;}if([...(state.decisions||[])].includes(chosen))$('decision').value=chosen;}
+  $('wait').hidden=isResident;
   $('choices').replaceChildren();
-  if(night&&!human.finished){
+  if(night&&!human.finished&&!isResident&&!spectator){
    const suggestions=['ask Nell for fuel and part','ask Ivo to repair','transfer reserve and part','order repair','allocate all','allocate shelter and cold store','promise shelter','propose to everyone: '];
    for(const words of suggestions){const b=text($('choices'),'button',words);b.type='button';b.onclick=()=>suggest(words)}
   }
@@ -116,17 +152,17 @@ details{margin:20px 0}summary{cursor:pointer;color:var(--muted)}#context{max-hei
   retry=retry||{operation,arguments:args,references:current.references,revision:current.revision,retry_key:crypto.randomUUID()};
   sending=true;render(current);
   try{
-   const response=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(retry)});
+   const response=await fetch(api('dispatch'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(retry)});
    const result=await response.json();
    if(!response.ok){retry=null;throw new Error(result.error.message)}
    retry=null;
-   if(operation==='human.respond'&&$('action').value===draft){$('action').value='';sessionStorage.removeItem('bellwether-draft')}
+   if(operation==='human.respond'&&$('action').value===draft){$('action').value='';sessionStorage.removeItem(draftKey)}
   }catch(error){$('error').textContent=error.message+' Your draft is kept.'}
   finally{sending=false;render(current)}
  }
- $('action-form').onsubmit=e=>{e.preventDefault();if(current?.result.human.pending)dispatch('human.respond',{request_id:current.result.human.pending.id,response:$('action').value})};
+ $('action-form').onsubmit=e=>{e.preventDefault();if(current?.result.human.pending)dispatch('human.respond',{request_id:current.result.human.pending.id,response:current.result.role==='Nell'?JSON.stringify({decision:$('decision').value,speech:$('action').value}):$('action').value})};
  $('begin').onclick=()=>dispatch('game.begin',{});
- const stream=new EventSource('/api/events');
+ const stream=new EventSource(api('events'));
  stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
  stream.onerror=()=>{connected=false;$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
 })();

@@ -214,6 +214,27 @@ def parse_action(text):
   )
 
 
+def parse_resident_response(text):
+  """Validate the shared decision/speech contract before a human turn wakes."""
+  start = text.find('{')
+  response, _ = json.JSONDecoder().raw_decode(text[start:])
+  if set(response) != {'decision', 'speech'} or not all(
+      isinstance(x, str) for x in response.values()
+  ):
+    raise ValueError('Expected decision and speech')
+  decision, speech = response['decision'].lower(), response['speech']
+  if decision not in (
+      'speak',
+      'accept',
+      'decline',
+      'counter',
+      'revoke',
+      'perform',
+  ):
+    raise ValueError('Unknown decision')
+  return decision, speech
+
+
 class StormNight(
     entity_component.ContextComponent, entity_component.ComponentWithLogging
 ):
@@ -510,23 +531,8 @@ class StormNight(
 
   def _resident(self, actor, text, task):
     # Malformed output is NEVER silently turned into agreement.
-    start = text.find('{')
     try:
-      response, _ = json.JSONDecoder().raw_decode(text[start:])
-      if set(response) != {'decision', 'speech'} or not all(
-          isinstance(x, str) for x in response.values()
-      ):
-        raise ValueError('Expected decision and speech')
-      decision, speech = response['decision'].lower(), response['speech']
-      if decision not in (
-          'speak',
-          'accept',
-          'decline',
-          'counter',
-          'revoke',
-          'perform',
-      ):
-        raise ValueError('Unknown decision')
+      decision, speech = parse_resident_response(text)
     except (ValueError, TypeError, AttributeError):
       decision, speech = 'speak', 'I cannot give a clear commitment right now.'
       self.emit(
@@ -708,12 +714,20 @@ class StormNight(
           'services': data['services'],
           'epilogue': data['epilogue'],
           'dawn_responses': data['dawn_responses'],
-          'journal': [x for x in data['events'] if viewer in x['recipients']],
+          'journal': [
+              x
+              for x in data['events']
+              if (
+                  set(NAMES) <= set(x['recipients'])
+                  if viewer == 'spectator'
+                  else viewer in x['recipients']
+              )
+          ],
           'relationships': [
               x for x in data['relationships'] if viewer in x['recipients']
           ],
           'institutions': INSTITUTIONS,
-          'knowledge': data['knowledge'][viewer],
+          'knowledge': data['knowledge'].get(viewer, []),
       })
 
 

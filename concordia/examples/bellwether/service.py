@@ -39,6 +39,9 @@ class Bellwether:
   """
 
   backend = 'fixture'
+  player_audiences = ('player',)
+  response_handlers = None
+  view_handlers = None
   initial_status = 'Ready for the Bellwether fixture'
   run_description = (
       'Run one fixture turn through standard Sequential. Cannot restart or'
@@ -110,7 +113,8 @@ class Bellwether:
             'Only the human coordinator’s delivered information.',
             {},
             lambda _: self.player_view(),
-            audiences=('player',),
+            audiences=self.player_audiences,
+            audience_handlers=self.view_handlers,
         )
     )
     register(
@@ -158,7 +162,8 @@ class Bellwether:
                 'response': ops.Parameter('string', 'Your action attempt'),
             },
             self._respond,
-            audiences=('player',),
+            audiences=self.player_audiences,
+            audience_handlers=self.response_handlers,
             mutation=True,
         )
     )

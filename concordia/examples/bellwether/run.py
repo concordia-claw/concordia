@@ -21,6 +21,7 @@ import time
 
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.bellwether import game_service
+from concordia.examples.bellwether import multiplayer
 from concordia.examples.bellwether import service
 from concordia.language_model import call_limit_wrapper
 from concordia.language_model import profiled_language_model
@@ -52,11 +53,33 @@ def main(argv=None):
   )
   parser.add_argument('--model', default='llama3.2:3b')
   parser.add_argument(
+      '--multiplayer',
+      action='store_true',
+      help=(
+          'Host-approved Coordinator and Nell browser sessions; three AI'
+          ' residents.'
+      ),
+  )
+  parser.add_argument(
+      '--public-origin',
+      help=(
+          'Exact HTTPS origin when proxying the player listener; never proxy'
+          ' the editor.'
+      ),
+  )
+  parser.add_argument(
+      '--cookie-path',
+      default='/',
+      help='Player mount path, including leading and trailing slash.',
+  )
+  parser.add_argument(
       '--dispute-file',
       type=pathlib.Path,
       help='Optional JSON with text and recipients for High Tide.',
   )
   args = parser.parse_args(argv)
+  if args.multiplayer and args.mode == 'slice':
+    parser.error('--multiplayer requires --mode fixture or live')
   dispute = (
       json.loads(args.dispute_file.read_text(encoding='utf-8'))
       if args.dispute_file
@@ -85,13 +108,21 @@ def main(argv=None):
   game = (
       service.Bellwether(args.output, port=args.editor_port)
       if args.mode == 'slice'
-      else game_service.Game(
+      else (multiplayer.SharedGame if args.multiplayer else game_service.Game)(
           args.output,
           port=args.editor_port,
           model=model,
           actor_logic=args.resident_prefab,
           dispute=dispute,
           profiler=profile,
+          **(
+              {
+                  'secure': bool(args.public_origin),
+                  'cookie_path': args.cookie_path,
+              }
+              if args.multiplayer
+              else {}
+          ),
       )
   )
   player = simulation_server.SimulationServer(
@@ -101,6 +132,10 @@ def main(argv=None):
       .read_text(encoding='utf-8'),
       operation_service=game.operations,
       audience='player',
+      browser_sessions=(
+          game.sessions if isinstance(game, multiplayer.SharedGame) else None
+      ),
+      public_origin=args.public_origin,
   )
   game.server.set_html_content(
       visual_interface.visualize_operations_to_html(

@@ -68,6 +68,7 @@ class Resident(prefab_lib.Prefab):
     params: dict[str, Any] = dict(self.params)
     style = params.pop('decision_logic')
     account = params.pop('account')
+    reader = params.pop('human_reader', None)
     params['extra_components'] = {
         scenario.ACCOUNT: constant.Constant(
             account, pre_act_label='Previous storm account'
@@ -92,10 +93,21 @@ class Resident(prefab_lib.Prefab):
           pre_act_label='Resident instructions',
       )
     builder = basic.Entity if style == 'basic' else minimal.Entity
-    return builder(params=params).build(model, memory_bank)
+    policy = (
+        (
+            lambda order: human_act_component.HumanActComponent(
+                reader, component_order=order
+            )
+        )
+        if reader is not None
+        else None
+    )
+    return builder(params=params).build(
+        model, memory_bank, act_component_factory=policy
+    )
 
 
-def configuration(reader, world, *, actor_logic='minimal'):
+def configuration(reader, world, *, actor_logic='minimal', human_readers=None):
   """Build fresh components per service; this Config is single-build only."""
   if actor_logic not in ('minimal', 'basic'):
     raise ValueError(
@@ -194,6 +206,11 @@ def configuration(reader, world, *, actor_logic='minimal'):
                 'goal': goal,
                 'account': account,
                 'decision_logic': actor_logic,
+                **(
+                    {'human_reader': human_readers[name]}
+                    if human_readers and name in human_readers
+                    else {}
+                ),
                 'custom_instructions': (
                     f'You are {name}, a resident of Bellwether. {goal} Make'
                     ' your own decisions based on your memories and delivered'

@@ -69,6 +69,7 @@ setuptools.setup(
             'player.html',
             'README.md',
             'GAME.md',
+            'MULTIPLAYER.md',
         ],
         'concordia.examples.astral_canticle': [
             'static/*',

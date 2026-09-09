@@ -47,7 +47,8 @@ class Game(service.Bellwether):
       dispute=None,
       session_id=None,
       port=0,
-      profiler=None
+      profiler=None,
+      human_readers=None
   ):
     self.fixture = model is None
     self.backend = 'fixture' if self.fixture else 'live'
@@ -64,7 +65,10 @@ class Game(service.Bellwether):
         session_id=session_id,
         port=port,
         config_factory=lambda reader: game_prefab.configuration(
-            reader, self.world, actor_logic=actor_logic
+            reader,
+            self.world,
+            actor_logic=actor_logic,
+            human_readers=human_readers,
         ),
         model=model or game_prefab.FixtureModel(),
         max_steps=64,
@@ -84,7 +88,7 @@ class Game(service.Bellwether):
             'Begin the night. One run only; reload never restarts.',
             {},
             self._start,
-            audiences=('player',),
+            audiences=self.player_audiences,
             mutation=True,
         )
     )
@@ -98,7 +102,7 @@ class Game(service.Bellwether):
                 )
             },
             lambda args: game.parse_action(args['text']),
-            audiences=('player', 'developer'),
+            audiences=(*self.player_audiences, 'developer'),
         )
     )
     self.operations.register(

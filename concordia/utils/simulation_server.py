@@ -25,8 +25,10 @@ import socketserver
 import sys
 import threading
 from typing import Any
+from urllib.parse import urlsplit
 
 from concordia.environment import step_controller as step_controller_lib
+from concordia.utils import browser_sessions as browser_sessions_lib
 from concordia.utils import operation_service as operation_service_lib
 
 
@@ -46,6 +48,8 @@ class SimulationServer:
       host: str = '127.0.0.1',
       operation_service: operation_service_lib.OperationService | None = None,
       audience: str = 'developer',
+      browser_sessions: browser_sessions_lib.BrowserSessions | None = None,
+      public_origin: str | None = None,
   ):
     """Initialize the simulation server.
 
@@ -60,7 +64,44 @@ class SimulationServer:
       operation_service: Optional shared operation registry. When set, only the
         capability-bound API is exposed; legacy endpoints are disabled.
       audience: Fixed audience for this listener, never supplied by a request.
+      browser_sessions: Optional host-approved cookies instead of a fixed
+        audience. Only the trusted developer listener may approve roles.
+      public_origin: Exact HTTPS proxy origin for same-origin checks.
+        Forwarded headers are not trusted to choose it; never proxy the editor.
     """
+    if (
+        browser_sessions is not None
+        and not browser_sessions.secure
+        and host not in ('127.0.0.1', '::1', 'localhost')
+    ):
+      raise ValueError(
+          'Remote browser sessions require Secure cookies and HTTPS.'
+      )
+    if (
+        browser_sessions is not None
+        and browser_sessions.secure
+        and public_origin is None
+    ):
+      raise ValueError(
+          'Secure browser sessions require an exact HTTPS public_origin.'
+      )
+    if browser_sessions is not None and operation_service is None:
+      raise ValueError('Browser sessions require a capability-bound service.')
+    if public_origin is not None:
+      origin = urlsplit(public_origin)
+      if (
+          origin.scheme != 'https'
+          or not origin.netloc
+          or origin.path
+          or origin.query
+          or origin.fragment
+          or origin.username
+      ):
+        raise ValueError(
+            'public_origin must be an exact HTTPS origin without a path.'
+        )
+    self._browser_sessions = browser_sessions
+    self._public_origin = public_origin
     self._operation_service = operation_service
     self._audience = audience
     self._port = port
@@ -312,6 +353,8 @@ class SimulationServer:
     server = self
     operation_service = self._operation_service
     audience = self._audience
+    browser_sessions = self._browser_sessions
+    public_origin = self._public_origin
 
     class Handler(http.server.BaseHTTPRequestHandler):
       """HTTP request handler for simulation server."""
@@ -320,12 +363,45 @@ class SimulationServer:
         """Suppress HTTP request logging."""
         del format, args  # Unused
 
+      def handle(self):
+        try:
+          super().handle()
+        except (ConnectionResetError, BrokenPipeError):
+          # Normal browser disconnect, including an abandoned SSE connection.
+          # An accepted mutation remains protected by the service retry ledger.
+          pass
+
+      def end_headers(self):
+        if getattr(self, '_session_cookie', None):
+          self.send_header('Set-Cookie', self._session_cookie)
+        self.send_header('Cache-Control', 'no-store')
+        super().end_headers()
+
+      def _identify(self):
+        self._request_audience = audience
+        if browser_sessions is not None:
+          try:
+            self._request_audience, self._session_cookie = (
+                browser_sessions.identify(
+                    self.headers.get('Cookie'),
+                    create=self.command == 'GET' and self.path == '/',
+                )
+            )
+          except operation_service_lib.OperationError as error:
+            self._send_json(
+                {'error': {'code': error.code, 'message': str(error)}}, 403
+            )
+            return False
+        return True
+
       def do_GET(self) -> None:  # pylint: disable=invalid-name
-        """Handle GET requests for HTML, Server-Sent Events, status, and commands."""
+        """Handle HTML, events, status and command requests."""
         print(f'[SERVER] GET request received: {self.path}')
 
         sys.stdout.flush()
         if operation_service is not None:
+          if not self._identify():
+            return
           self._handle_operation_get()
           return
         if self.path == '/':
@@ -343,6 +419,26 @@ class SimulationServer:
       def do_POST(self) -> None:  # pylint: disable=invalid-name
         """Handle POST requests for simulation control commands."""
         if operation_service is not None:
+          self.close_connection = True
+          try:
+            length = int(self.headers.get('Content-Length', 0))
+            if not 0 < length <= 1024 * 1024:
+              raise ValueError('Invalid body size')
+            self.connection.settimeout(10)
+            self._operation_body = self.rfile.read(length)
+          except (ValueError, TimeoutError, OSError):
+            self._send_json(
+                {
+                    'error': {
+                        'code': 'invalid_request',
+                        'message': 'Body must be 1 byte to 1 MiB.',
+                    }
+                },
+                400,
+            )
+            return
+          if not self._identify():
+            return
           self._handle_operation_post()
           return
         if self.path in ('/play', '/pause', '/step', '/stop'):
@@ -360,10 +456,12 @@ class SimulationServer:
         assert service is not None
         if self.path == '/':
           self._serve_html()
+        elif self.path == '/api/session' and browser_sessions is not None:
+          self._send_json(browser_sessions.own(self._request_audience))
         elif self.path == '/api/operations':
-          self._send_json(service.discover(audience))
+          self._send_json(service.discover(self._request_audience))
         elif self.path == '/api/state':
-          self._send_json(service.snapshot(audience))
+          self._send_json(service.snapshot(self._request_audience))
         elif self.path == '/api/events':
           self._serve_server_sent_events()
         else:
@@ -382,7 +480,8 @@ class SimulationServer:
         assert service is not None
         # Consume or close rejected bodies; never leave unread bytes on reuse.
         self.close_connection = True
-        if self.path != '/api/dispatch':
+        joining = self.path == '/api/join' and browser_sessions is not None
+        if self.path != '/api/dispatch' and not joining:
           self._send_json(
               {
                   'error': {
@@ -394,7 +493,12 @@ class SimulationServer:
           )
           return
         origin = self.headers.get('Origin')
-        if origin and origin != 'http://' + self.headers.get('Host', ''):
+        expected_origin = public_origin or 'http://' + self.headers.get(
+            'Host', ''
+        )
+        if (origin and origin != expected_origin) or (
+            browser_sessions is not None and origin != expected_origin
+        ):
           self._send_json(
               {
                   'error': {
@@ -411,8 +515,23 @@ class SimulationServer:
             raise ValueError('Body must be 1 byte to 1 MiB.')
           if self.headers.get_content_type() != 'application/json':
             raise ValueError('Send application/json.')
-          body = json.loads(self.rfile.read(length).decode('utf-8'))
-          self._send_json(service.dispatch(audience, body))
+          body = json.loads(self._operation_body.decode('utf-8'))
+          if joining:
+            assert browser_sessions is not None
+            if (
+                not isinstance(body, dict)
+                or set(body) != {'label', 'role'}
+                or not all(isinstance(x, str) for x in body.values())
+            ):
+              raise ValueError('Join requires label and role strings.')
+            with service.lock:
+              result = browser_sessions.request(
+                  self._request_audience, body['label'], body['role']
+              )
+              service.publish({'kind': 'browser.join_requested'})
+            self._send_json(result)
+          else:
+            self._send_json(service.dispatch(self._request_audience, body))
         except operation_service_lib.OperationError as error:
           self._send_json(
               {'error': {'code': error.code, 'message': str(error)}}, 409
@@ -444,7 +563,7 @@ class SimulationServer:
         self.close_connection = True
         service = operation_service
         client = (
-            service.subscribe(audience)
+            service.subscribe(self._request_audience)
             if service is not None
             else server.subscribe_to_events()
         )
@@ -460,7 +579,13 @@ class SimulationServer:
             try:
               message = client.get(timeout=1)
               if service is not None:
-                message = 'data: ' + json.dumps(message) + '\n\n'
+                # Re-resolve the principal at delivery, not just subscribe time.
+                # Queued snapshots must not outlive role revocation.
+                message = (
+                    'data: '
+                    + json.dumps(service.snapshot(self._request_audience))
+                    + '\n\n'
+                )
               self.wfile.write(message.encode('utf-8'))
             except queue.Empty:
               self.wfile.write(b': keepalive\n\n')
