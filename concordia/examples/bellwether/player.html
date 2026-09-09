@@ -361,7 +361,11 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
    const table=text($('outcome'),'table',''),head=text(table,'tr','');for(const h of ['Watch','Facility','Consequence'])text(head,'th',h);
    for(const record of night.services){const row=text(table,'tr','');for(const value of [watchLabel(record.watch),record.facility,record.consequence])text(row,'td',value)}
    text($('outcome'),'p','The previous-storm accounts remain disputed. Tonight’s accounting cannot decide who was right.');
-   for(const [name,speech] of Object.entries(night.dawn_responses)){text($('responses'),'h3',name);text($('responses'),'p',speech)}
+   for(const [name,speech] of Object.entries(night.dawn_responses)){
+    text($('responses'),'h3',name);
+    const row=text($('responses'),'p',speech===null?'Response unavailable. No usable reply was recorded.':speech);
+    row.dataset.responseStatus=speech===null?'unavailable':'available';
+   }
   }
  }
  async function dispatch(operation,args){

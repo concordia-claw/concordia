@@ -601,12 +601,25 @@ class StormNight(
     try:
       decision, speech = parse_resident_response(text)
     except (ValueError, TypeError, AttributeError):
-      decision, speech = 'speak', 'I cannot give a clear commitment right now.'
       self.emit(
           'invalid_resident_response',
-          f'{actor} returned an unsupported decision; no consent recorded.',
+          f'{actor} returned an unsupported decision; no new decision'
+          ' recorded.',
           [actor],
       )
+      # A technical failure is not the resident's speech or a refusal. Keep
+      # raw output private and report availability only to the task audience.
+      self.emit(
+          'response_unavailable',
+          f'{actor}’s response could not be read. No new decision was'
+          ' recorded.',
+          task['audience'],
+          actor=actor,
+          purpose=task['purpose'],
+      )
+      if task['purpose'].startswith('dawn'):
+        self.data['dawn_responses'][actor] = None
+      return
     self.emit(
         'speech',
         actor + ': ' + speech,

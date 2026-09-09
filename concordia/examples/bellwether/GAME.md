@@ -478,3 +478,20 @@ snapshot can contain private actor information; it is not the sanitized public
 account, nor is it a complete resumable engine checkpoint. This change reduces
 eager DOM rendering, not server/SSE payload size or
 network cost. Full download occurs only when requested.
+
+### Unavailable resident responses
+
+A malformed resident response is a technical failure, not the resident's
+refusal, uncertainty or speech. The game records a neutral response-unavailable
+notice for the intended task audience without echoing the raw output. No new
+decision, consent or material effect is inferred, and an existing commitment
+is not silently revoked. Valid refusals and other valid decisions retain their
+normal behavior. The turn still progresses; no automatic model retry or free
+replacement player action is added.
+
+At dawn, an unavailable reply is represented by null in dawn_responses and is
+labelled “Response unavailable” in the player view. It is not added to dialogue
+as invented first-person words. Public accounts include only publicly delivered
+failure notices; a private exchange's failure does not become public. The
+private invalid_resident_response diagnostic is retained for developers. Old
+saved records are not rewritten, and schema-constrained models can still fail.
