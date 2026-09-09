@@ -243,3 +243,9 @@ counterexamples, separate rules from beliefs/enforcement/compliance, and seek
 external evidence. No scripted scientific conclusion, policy recommendation,
 trust score, human usability result or social generalization follows from this
 fixture, these tests, or a single local-model night.
+
+## Standard-engine companion
+
+[ENGINES.md](ENGINES.md) provides a runnable simultaneous resource council,
+actual scheduling/API differences, and explicit asynchronous limitations.
+The main Bellwether night remains Sequential.

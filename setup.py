@@ -72,6 +72,7 @@ setuptools.setup(
             'MULTIPLAYER.md',
             'VOICE.md',
             'RESEARCHER.md',
+            'ENGINES.md',
         ],
         'concordia.examples.astral_canticle': [
             'static/*',
