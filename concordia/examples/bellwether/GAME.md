@@ -390,3 +390,27 @@ draft recovery keys and entity names remain Coordinator; the first recorded
 watch remains Dusk. Raw dialogue, the human component's assembled context,
 public account records and API/CLI values are not rewritten. The role guide
 explains this mapping. Existing hosted chapters are not reset by this change.
+
+### Sending and uncertain connections
+
+The action area distinguishes **Sending** (confirmation pending), **Action
+received** (delivery confirmed, not a successful outcome), rejection, and an
+unconfirmed network reply. A lost reply does not mean that nothing was sent:
+check the journal before sending again. No automatic retry or fabricated model
+progress is shown. If the same prompt is still open and the draft is unchanged,
+a manual Send reuses the existing server idempotency key.
+
+You can edit your draft while an acknowledgment is pending. A late success
+clears only the unchanged draft that initiated it; re-entering identical text
+counts as a new edit. Revocation or a changed browser role clears the old
+submission's presentation, and its delayed success or failure cannot modify
+the new role's draft. Submission feedback is page-local; reload obtains the
+current scoped server state, while existing draft recovery remains in use.
+
+Chromium regressions cover delayed success, pre-send network loss, a lost
+successful reply, validation rejection, same-key manual retry, same-text edits,
+role revocation/rejoin, and narrow portrait/landscape. They use synthetic human
+input and real server/SSE delivery with simulated client network delays.
+Simulation.play and resident-model calls are blocked; standard Inventory
+construction still uses its NoLanguageModel helper. These are not measured
+phone-network reliability or physical-device usability results.
