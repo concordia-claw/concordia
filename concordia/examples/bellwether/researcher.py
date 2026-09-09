@@ -50,7 +50,13 @@ class Case:
 
 
 def prepare_case(
-    name, reader, *, actor_logic='minimal', human_readers=None, dispute=None
+    name,
+    reader,
+    *,
+    actor_logic='minimal',
+    human_readers=None,
+    dispute=None,
+    action_model=None
 ):
   """Return standard Config + owned world, ready for generic.Simulation.
 
@@ -140,7 +146,11 @@ def prepare_case(
       dispute=dispute,
   )
   config = game_prefab.configuration(
-      reader, world, actor_logic=actor_logic, human_readers=human_readers
+      reader,
+      world,
+      actor_logic=actor_logic,
+      human_readers=human_readers,
+      action_model=action_model,
   )
   instances = []
   for instance in config.instances:

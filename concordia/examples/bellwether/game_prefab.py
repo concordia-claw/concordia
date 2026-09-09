@@ -17,6 +17,7 @@
 import json
 from typing import Any
 
+from concordia.components.agent import concat_act_component
 from concordia.components.agent import constant
 from concordia.components.agent import human_act_component
 from concordia.components.game_master import make_observation
@@ -64,7 +65,7 @@ class Resident(prefab_lib.Prefab):
       ' configurable.'
   )
 
-  def build(self, model, memory_bank):
+  def build(self, model, memory_bank, *, action_model=None):
     params: dict[str, Any] = dict(self.params)
     style = params.pop('decision_logic')
     account = params.pop('account')
@@ -90,26 +91,49 @@ class Resident(prefab_lib.Prefab):
           pre_act_label='Resident instructions',
       )
     builder = basic.Entity if style == 'basic' else minimal.Entity
-    policy = (
-        (
-            lambda order: human_act_component.HumanActComponent(
-                reader, component_order=order
-            )
+    policy = None
+    if reader is not None:
+
+      def human_policy(order):
+        return human_act_component.HumanActComponent(
+            reader, component_order=order
         )
-        if reader is not None
-        else None
-    )
+
+      policy = human_policy
+    elif action_model is not None:
+
+      def model_policy(order):
+        return concat_act_component.ConcatActComponent(
+            action_model, component_order=order, prefix_entity_name=False
+        )
+
+      policy = model_policy
     return builder(params=params).build(
         model, memory_bank, act_component_factory=policy
     )
 
 
-def configuration(reader, world, *, actor_logic='minimal', human_readers=None):
+def configuration(
+    reader,
+    world,
+    *,
+    actor_logic='minimal',
+    human_readers=None,
+    action_model=None,
+):
   """Build fresh components per service; this Config is single-build only."""
   if actor_logic not in ('minimal', 'basic'):
     raise ValueError(
         'Choose standard minimal or basic resident decision logic.'
     )
+
+  bound_action_model = action_model
+
+  class ConfiguredResident(Resident):
+    """Runtime-only model binding, never stored in the JSON instance params."""
+
+    def build(self, model, memory_bank, *, action_model=bound_action_model):
+      return super().build(model, memory_bank, action_model=action_model)
 
   class Coordinator(prefab_lib.Prefab):
     """Use the transport-neutral human policy with standard context."""
@@ -203,6 +227,10 @@ def configuration(reader, world, *, actor_logic='minimal', human_readers=None):
                 'goal': goal,
                 'account': account,
                 'decision_logic': actor_logic,
+                # Final resident actions are JSON objects, not name-prefixed
+                # sentence completions. Use the standard ConcatAct option.
+                # InstanceConfig's legacy str annotation omits bool options.
+                'prefix_entity_name': False,  # pyrefly: ignore[bad-assignment]
                 'institutions': world.institutions,
                 **(
                     {'human_reader': human_readers[name]}
@@ -233,7 +261,7 @@ def configuration(reader, world, *, actor_logic='minimal', human_readers=None):
       default_premise='',
       prefabs={
           'coordinator': Coordinator(),
-          'resident': Resident(),
+          'resident': ConfiguredResident(),
           'game_master': GameMaster(),
       },
       instances=instances,

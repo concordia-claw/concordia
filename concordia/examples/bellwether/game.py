@@ -214,6 +214,29 @@ def parse_action(text):
   )
 
 
+RESIDENT_DECISIONS = (
+    'speak',
+    'accept',
+    'decline',
+    'counter',
+    'revoke',
+    'perform',
+)
+
+
+def resident_response_schema():
+  """Provider shape constraint; existing resolution still validates effects."""
+  return {
+      'type': 'object',
+      'properties': {
+          'decision': {'type': 'string', 'enum': list(RESIDENT_DECISIONS)},
+          'speech': {'type': 'string'},
+      },
+      'required': ['decision', 'speech'],
+      'additionalProperties': False,
+  }
+
+
 def parse_resident_response(text):
   """Validate the shared decision/speech contract before a human turn wakes."""
   start = text.find('{')
@@ -223,14 +246,7 @@ def parse_resident_response(text):
   ):
     raise ValueError('Expected decision and speech')
   decision, speech = response['decision'].lower(), response['speech']
-  if decision not in (
-      'speak',
-      'accept',
-      'decline',
-      'counter',
-      'revoke',
-      'perform',
-  ):
+  if decision not in RESIDENT_DECISIONS:
     raise ValueError('Unknown decision')
   return decision, speech
 

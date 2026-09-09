@@ -44,6 +44,7 @@ class Game(service.Bellwether):
       output,
       *,
       model=None,
+      action_model=None,
       embedder=None,
       actor_logic='minimal',
       recipe='bellwether',
@@ -61,6 +62,7 @@ class Game(service.Bellwether):
           recipe,
           reader,
           actor_logic=actor_logic,
+          action_model=action_model,
           human_readers=human_readers,
           dispute=dispute,
       )

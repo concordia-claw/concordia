@@ -414,3 +414,48 @@ input and real server/SSE delivery with simulated client network delays.
 Simulation.play and resident-model calls are blocked; standard Inventory
 construction still uses its NoLanguageModel helper. These are not measured
 phone-network reliability or physical-device usability results.
+
+### Live basic residents and action-only structured output
+
+The live launcher uses two views of the same local model. The ordinary model
+serves standard basic self-perception, situation-perception and
+person-by-situation questions as prose. Only the final standard ConcatAct policy
+uses Ollama's JSON-schema output for the existing decision/speech contract.
+The schema permits every existing decision (including refusal and revocation);
+it does not determine consent, truth or material consequences. The game still
+validates actions and enforces the same resource and commitment rules.
+
+Resident configuration selects the standard prefix_entity_name option as false
+so JSON is not prefilled with a resident name. Minimal now honors that option
+with its previous true default unchanged; basic already supports it. Human
+readers take precedence over the model-backed policy. The action-model binding
+is runtime-only, not a serialized object or an imported module from a project.
+
+For already installed local models, select --mode live --resident-prefab basic
+--model llama3.2:3b --embedding-model all-minilm in the normal source-checkout
+launch command. Use unused private ports and a distinct output directory.
+Sequential remains the engine. Each HTTP request is limited to 90 seconds and
+256 generated tokens; the existing call-limit wrappers reserve 192 context
+calls and 64 action calls, at most 256 total. The shared standard profiler counts
+both paths. No provider/model download or silent embedding fallback is added.
+
+Basic makes additional component-generation requests compared with minimal;
+semantic embedding makes additional local requests. Inspect the profiler and
+invalid_resident_response events, not just HTTP status or a terminal phase.
+Changing prompts or actor/memory configuration can change live behavior, even
+for minimal actors. The provider may reject a schema, time out or truncate an
+answer; those failures are not permission to invent a resident's consent.
+
+Two preliminary basic/local-embedding nights reached dawn but had ten and seven
+malformed resident outputs respectively; successful transport was not valid
+actor behavior. Their evidence is retained. The second private browser harness
+also timed out on a large developer screenshot after reaching dawn; later
+harnesses write machine-readable evidence before optional screenshots.
+A subsequent basic/llama3.2:3b/all-minilm schema-routed night passed strict
+format and Chromium checks: 12 automated human inputs, 24 Sequential steps,
+48 successful local generation calls, 196 embedding requests, zero malformed
+resident responses and no browser errors. It took about 305 seconds of
+automated wall time. Six of nine facility-watches were supplied; no repair was
+forced. This single run does not establish reliability across models or seeds.
+Automated runs do not establish physical Android usability, human play duration,
+deterministic replay or empirical social validity.

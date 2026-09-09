@@ -20,6 +20,7 @@ import pathlib
 import time
 
 from concordia.contrib.language_models.ollama import ollama_model
+from concordia.examples.bellwether import game as rules
 from concordia.examples.bellwether import game_service
 from concordia.examples.bellwether import local_embeddings
 from concordia.examples.bellwether import multiplayer
@@ -117,23 +118,28 @@ def main(argv=None):
       else None
   )
   model = None
+  action_model = None
   if args.mode == 'live':
-    model = call_limit_wrapper.CallLimitLanguageModel(
-        profiled_language_model.ProfiledLanguageModel(
-            ollama_model.OllamaLanguageModel(
-                args.model,
-                request_timeout=90,
-                max_output_tokens=256,
-                system_message=(
-                    'Respond as the instructed resident, with one JSON decision'
-                    ' object. No markdown.'
-                ),
-            ),
-            model_name=args.model,
-            profiler_instance=profile,
-        ),
-        max_calls=256,
-    )
+
+    def bounded_model(max_calls, response_format=None):
+      return call_limit_wrapper.CallLimitLanguageModel(
+          profiled_language_model.ProfiledLanguageModel(
+              ollama_model.OllamaLanguageModel(
+                  args.model,
+                  request_timeout=90,
+                  max_output_tokens=256,
+                  response_format=response_format,
+              ),
+              model_name=args.model,
+              profiler_instance=profile,
+          ),
+          max_calls=max_calls,
+      )
+
+    # Normal prose for basic perception; schema only for final resident acts.
+    # Two existing counters reserve a combined maximum of 256 local calls.
+    model = bounded_model(192)
+    action_model = bounded_model(64, rules.resident_response_schema())
   game = (
       service.Bellwether(args.output, port=args.editor_port)
       if args.mode == 'slice'
@@ -141,6 +147,7 @@ def main(argv=None):
           args.output,
           port=args.editor_port,
           model=model,
+          action_model=action_model,
           embedder=embedder,
           actor_logic=args.resident_prefab,
           recipe=args.recipe,
