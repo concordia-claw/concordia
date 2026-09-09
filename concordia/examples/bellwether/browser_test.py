@@ -156,6 +156,20 @@ def test_gui_cli_semantics_reconnect_and_player_privacy(tmp_path):
               f'http://127.0.0.1:{public.bound_port}' + endpoint
           ) as response:
             assert 'PRIVATE_' not in response.read().decode()
+        # The one-turn service shares this page but has no public exporter.
+        gui.phase = 'failed'
+        gui._failure = 'FixtureRuntimeFailure'  # pylint: disable=protected-access
+        gui._finish()  # pylint: disable=protected-access
+        gui.operations.publish({'kind': 'test.failed_fixture'})
+        playwright.expect(player.locator('#connection')).to_contain_text(
+            'Night stopped'
+        )
+        playwright.expect(player.locator('#run-status')).to_be_visible()
+        assert (
+            'public account' not in player.locator('#run-status').inner_text()
+        )
+        playwright.expect(player.locator('#public-account')).to_be_hidden()
+        assert 'FixtureRuntimeFailure' not in player.content()
         assert not errors
         browser.close()
     finally:

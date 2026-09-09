@@ -495,3 +495,18 @@ as invented first-person words. Public accounts include only publicly delivered
 failure notices; a private exchange's failure does not become public. The
 private invalid_resident_response diagnostic is retained for developers. Old
 saved records are not rewritten, and schema-constrained models can still fail.
+
+### Interrupted runs in the player view
+
+A closed human-input session is not evidence that a run completed. The player
+view uses the existing run phase to distinguish completion, unexpected stop and
+input closure. After failure, every approved role (including spectators) sees
+a neutral stopped-run notice, not a success or indefinite waiting message.
+Private provider diagnostics are not included in that notice.
+
+Recorded scoped journals, map inspection and the existing public-account
+export remain available while the service is connected. Unsent local drafts
+survive reload. The account export remains labelled interrupted and is not a
+saved game. Reloading does not restart the run; no automatic retry, replay or
+replacement worker is added. Human action/Begin controls stop accepting input,
+and unrelated host-approval messages cannot overwrite the terminal status.
