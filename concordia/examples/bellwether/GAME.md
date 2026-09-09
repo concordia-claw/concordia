@@ -526,3 +526,18 @@ published updates. JSON envelopes, reconnect snapshots, heartbeat comments,
 player privacy and read-only exports are unchanged. Full delivered snapshots
 can still be large; this change does not compress their contents or establish
 any model-latency, bandwidth or physical-device performance result.
+
+### Elapsed waiting after a confirmed action
+
+After an action has been confirmed to this page and the game is still running,
+the action area shows elapsed confirmation time after fifteen seconds, updated
+in five-second increments. This uses the browser's monotonic clock. It is not
+model execution time, a percentage or a prediction of when a response will
+arrive. No extra request or automatic resend is made. The changing text is not
+a live-region announcement every tick; the existing receipt remains accessible.
+
+The timer is absent while confirmation is uncertain or rejected and clears on
+a new prompt, role change, known disconnection or terminal run state. Reload
+keeps the existing draft behavior but does not reconstruct a previous page's
+confirmation time. This is not provider-cost or physical-device performance
+measurement, and it does not add cancellation or restart support.

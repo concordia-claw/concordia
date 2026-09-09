@@ -73,7 +73,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
 <p id="note-summary" class="subtle"></p><details id="note-details" hidden><summary>Source details</summary><p id="note-provenance" class="subtle"></p></details><label for="note-text">Review and edit the description</label><textarea id="note-text" disabled></textarea>
 <button id="use-note" type="button" disabled>Add reviewed text to action draft</button><button id="clear-note" type="button" disabled>Clear review</button><p id="note-status" role="status">Nothing is sent automatically.</p></details>
 <form id="action-form"><label for="action">What do you do or say?</label><textarea id="action" placeholder="Choose a suggestion, or write your own words…"></textarea>
-<p id="preview-result" role="status"></p><p id="submission-status" role="status"></p>
+<p id="preview-result" role="status"></p><p id="submission-status" role="status"></p><p id="waiting-status" class="subtle" aria-live="off" hidden></p>
 <p><button type="button" id="preview" hidden disabled>Check interpretation · free</button> <button type="button" id="wait">Suggest waiting</button> <button id="act" disabled>Send action</button></p></form></section>
 </div><button id="jump-action" type="button" hidden>Go to your action</button><p id="error" role="alert"></p>
 <script>
@@ -81,11 +81,21 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  const $=id=>document.getElementById(id);let current,retry,sending=false,picked,connected=false,identity='',draftKey='bellwether-draft';
  let previewController=null,previewSerial=0,previewScope='';
  let draftRevision=0,submission=null;
- function resetSubmission(){submission=null;sending=false;retry=null;draftRevision++;$('submission-status').textContent='';$('error').textContent='';}
+ function resetSubmission(){submission=null;sending=false;retry=null;draftRevision++;$('submission-status').textContent='';$('error').textContent='';waitingStatus();}
+ function waitingStatus(){
+  const state=current?.result;
+  const active=connected&&state&&!state.lobby&&state.phase==='running'&&!runIsClosed(state)&&submission?.stage==='received'&&submission.operation==='human.respond'&&Number.isFinite(submission.confirmedAt)&&(!state.human.pending||state.human.pending.id===submission.requestId);
+  const seconds=active?5*Math.floor((performance.now()-submission.confirmedAt)/5000):0;
+  const visible=Boolean(active&&seconds>=15),node=$('waiting-status');
+  node.hidden=!visible;
+  const words=visible?'Confirmed '+seconds+' seconds ago in this page. This is not a progress estimate.':'';
+  if(node.textContent!==words)node.textContent=words;
+ }
  function deliveryStatus(){
   $('act').textContent=sending?'Sending…':'Send action';
   $('act').setAttribute('aria-busy',String(sending));
   if(submission?.stage==='received'&&submission.operation==='human.respond'&&current?.result.human?.pending&&current.result.human.pending.id!==submission.requestId)submission=null;
+  waitingStatus();
   if(!submission){$('submission-status').textContent='';return;}
   const messages={sending:'Sending… confirmation is pending. You can keep editing your draft.',received:'Action received. Delivery is confirmed, not its outcome.',rejected:'The action was not accepted. Your draft is kept.',uncertain:'Confirmation is unavailable. Your draft is kept; check the journal before sending again.'};
   let message=messages[submission.stage]||'';
@@ -385,7 +395,7 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
    const result=await response.json();
    if(!stillOurs())return;
    if(!response.ok){retry=null;attempt.stage='rejected';throw new Error(result.error.message)}
-   retry=null;attempt.stage='received';
+   retry=null;attempt.stage='received';attempt.confirmedAt=performance.now();
    if(operation==='human.respond'&&draftRevision===version&&$('action').value===draft){$('action').value='';sessionStorage.removeItem(key)}
   }catch(error){
    if(!stillOurs())return;
@@ -463,6 +473,8 @@ input,select{font:inherit;background:#102732;color:inherit;border:1px solid #819
  $('begin').onclick=()=>dispatch('game.begin',{});
  const stream=new EventSource(api('events'));
  stream.onmessage=e=>{connected=true;render(JSON.parse(e.data))};
+ // Local elapsed time only; no requests or automatic resend.
+ setInterval(waitingStatus,5000);
  stream.onerror=()=>{connected=false;voice.disconnect();visualNotes.disconnect();invalidatePreview();$('connection').textContent='Reconnecting… your draft is kept';$('act').disabled=true;$('begin').disabled=true;if(current)render(current)};
 })();
 </script></body></html>
