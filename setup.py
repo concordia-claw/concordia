@@ -65,7 +65,11 @@ setuptools.setup(
     ],
     packages=setuptools.find_packages(include=['concordia', 'concordia.*']),
     package_data={
-        'concordia.examples.bellwether': ['player.html', 'README.md'],
+        'concordia.examples.bellwether': [
+            'player.html',
+            'README.md',
+            'GAME.md',
+        ],
         'concordia.examples.astral_canticle': [
             'static/*',
             'README.md',

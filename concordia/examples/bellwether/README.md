@@ -1,4 +1,9 @@
-# Last Light at Bellwether — shared-service slice
+# Last Light at Bellwether
+
+**Full three-watch game:** see [GAME.md](GAME.md) for the playable fixture and
+local live-resident modes, the two strategies, and measured validation limits.
+
+## Original shared-service slice (retained with --mode slice)
 
 A **one-turn fixture**, not the complete live game or a research experiment.
 This example teaches a reusable boundary between a human player, the standard
@@ -10,7 +15,7 @@ Concordia visual editor, and a noninteractive attached CLI. All three share one
 
 ```sh
 python -m pip install -e '.[dev]'
-python -m concordia.examples.bellwether.run --editor-port 8784 --player-port 8785 --output runs/bellwether-fixture
+python -m concordia.examples.bellwether.run --mode slice --editor-port 8784 --player-port 8785 --output runs/bellwether-fixture
 ```
 
 Open <http://127.0.0.1:8784> for the editor and
@@ -135,9 +140,9 @@ A separate manually launched one-turn fixture walkthrough verifies human input,
 standard sequential resolution and logs. Automated checks are not human usability
 or social/scientific validation.
 
-**Still backlog:** the full 15–25 minute three-watch game, live resident decisions,
-consent/commitment/compliance mechanics, fuel conservation at watch boundaries,
-repair/work orders, disputed-account recipients, dawn outcomes, project authoring,
+**Beyond the original one-turn mode:** three-watch accounting, consent/work,
+live residents, two strategies and dawn are now provided by [GAME.md](GAME.md).
+Human 15–25 minute usability remains unmeasured. Still backlog: project authoring,
 full editor-family parity, assets/undo/breakpoints, isolated checkpoint continuation,
 branches, experiments, measurement/export and fresh-environment showcase tours.
 The full Bellwether A–H acceptance and six-workflow baseline are not satisfied by

@@ -15,6 +15,7 @@
 """One authoritative Bellwether fixture service used by all three transports."""
 
 import copy
+import logging
 import pathlib
 import threading
 
@@ -37,18 +38,36 @@ class Bellwether:
   advertised. Pause requests do not authorize edits while any worker is alive.
   """
 
-  def __init__(self, output: pathlib.Path, *, session_id=None, port=0):
+  backend = 'fixture'
+  initial_status = 'Ready for the Bellwether fixture'
+  run_description = (
+      'Run one fixture turn through standard Sequential. Cannot restart or'
+      ' replace.'
+  )
+  response_description = 'Submit the pending coordinator action (fixture only).'
+
+  def __init__(
+      self,
+      output: pathlib.Path,
+      *,
+      session_id=None,
+      port=0,
+      config_factory=None,
+      model=None,
+      max_steps=1
+  ):
     self.operations = ops.OperationService(
         project_id='bellwether-fixture-v1', session_id=session_id
     )
     self.inbox = human_io.HumanSession(
         on_request=self._requested,
-        initial_status='Ready for the Bellwether fixture',
+        initial_status=self.initial_status,
     )
-    self.config = scenario.configuration(self.inbox)
+    self.config = (config_factory or scenario.configuration)(self.inbox)
+    self.max_steps = max_steps
     self.simulation = generic.Simulation(
         self.config,
-        no_language_model.NoLanguageModel(),
+        model or no_language_model.NoLanguageModel(),
         lambda _: np.ones(8),
         engine=sequential.Sequential(),
     )
@@ -62,15 +81,18 @@ class Bellwether:
         port=port, operation_service=self.operations
     )
     self.server.set_simulation(self.simulation)
+    self._seed()
+    self._checkpoint = self.simulation.make_checkpoint_data()
+    self.operations.set_view('developer', self.developer_view)
+    self.operations.set_view('player', self.player_view)
+    self._register()
+
+  def _seed(self):
     for actor in self.simulation.get_entities():
       if actor.name == scenario.PLAYER:
         actor.observe(scenario.PUBLIC['opening'])
       else:
         actor.observe(scenario.RESIDENTS[actor.name][1])
-    self._checkpoint = self.simulation.make_checkpoint_data()
-    self.operations.set_view('developer', self.developer_view)
-    self.operations.set_view('player', self.player_view)
-    self._register()
 
   def _register(self):
     register = self.operations.register
@@ -109,8 +131,7 @@ class Bellwether:
     register(
         ops.Operation(
             'run.start',
-            'Run one fixture turn through standard Sequential. Cannot restart'
-            ' or replace.',
+            self.run_description,
             {},
             self._start,
             mutation=True,
@@ -129,7 +150,7 @@ class Bellwether:
     register(
         ops.Operation(
             'human.respond',
-            'Submit the pending coordinator action (fixture only).',
+            self.response_description,
             {
                 'request_id': ops.Parameter(
                     'string', 'Current pending request ID'
@@ -221,15 +242,15 @@ class Bellwether:
     self._worker.start()
     self._monitor = threading.Thread(target=self._join, daemon=True)
     self._monitor.start()
-    self.operations.publish({'kind': 'run.started', 'backend': 'fixture'})
+    self.operations.publish({'kind': 'run.started', 'backend': self.backend})
     return {'phase': self.phase}
 
   def _execute(self):
     try:
       self._log = self.simulation.play(
-          max_steps=1,
+          max_steps=self.max_steps,
           step_controller=self.server.step_controller,
-          step_callback=self.server.broadcast_step,
+          step_callback=self._step,
       )
       self.output.mkdir(parents=True, exist_ok=True)
       (self.output / 'simulation.json').write_text(
@@ -239,6 +260,7 @@ class Bellwether:
           self._log.to_html(), encoding='utf-8'
       )
     except Exception as error:  # pylint: disable=broad-exception-caught
+      logging.exception('Bellwether execution failed')
       self._failure = type(error).__name__
 
   def _join(self):
@@ -248,16 +270,20 @@ class Bellwether:
       self.phase = 'failed' if self._failure else 'completed'
       self.server.broadcast_completion()
       self._checkpoint = self.simulation.make_checkpoint_data()
-      if not self._failure:
-        self.inbox.add_observation(scenario.RESOLUTION)
-      self.inbox.finish(
-          'Fixture complete.'
-          if not self._failure
-          else 'Fixture stopped; inspect the developer surface.'
-      )
+      self._finish()
       self.operations.publish(
-          {'kind': 'run.' + self.phase, 'backend': 'fixture'}
+          {'kind': 'run.' + self.phase, 'backend': self.backend}
       )
+
+  def _step(self, data):
+    self.server.broadcast_step(data)
+
+  def _finish(self):
+    if not self._failure:
+      self.inbox.add_observation(scenario.RESOLUTION)
+    self.inbox.finish(
+        'Fixture complete.' if not self._failure else 'Fixture stopped.'
+    )
 
   def _pause(self, args):
     del args
