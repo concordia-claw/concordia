@@ -14,6 +14,7 @@
 
 """One authoritative Bellwether fixture service used by all three transports."""
 
+from collections.abc import Callable
 import copy
 import logging
 import pathlib
@@ -57,8 +58,16 @@ class Bellwether:
       port=0,
       config_factory=None,
       model=None,
+      embedder: Callable[[str], np.ndarray] | None = None,
       max_steps=1
   ):
+    if embedder is not None and not callable(embedder):
+      raise ValueError('embedder must be a runtime callable')
+    self.embedding = (
+        {'kind': 'constant_placeholder', 'dimensions': 8}
+        if embedder is None
+        else {'kind': 'provided_callable'}
+    )
     self.operations = ops.OperationService(
         project_id='bellwether-fixture-v1', session_id=session_id
     )
@@ -71,7 +80,7 @@ class Bellwether:
     self.simulation = generic.Simulation(
         self.config,
         model or no_language_model.NoLanguageModel(),
-        lambda _: np.ones(8),
+        embedder if embedder is not None else lambda _: np.ones(8),
         engine=sequential.Sequential(),
     )
     self.output = output
@@ -184,6 +193,7 @@ class Bellwether:
         'phase': self.phase,
         'quiescent': self._worker is None or not self._worker.is_alive(),
         'initial': copy.deepcopy(scenario.INITIAL),
+        'embedding': copy.deepcopy(self.embedding),
         'target': self._account(),
         'target_path': ['Mara', scenario.ACCOUNT, 'state'],
         'components_at_last_boundary': copy.deepcopy(self._checkpoint),

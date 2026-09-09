@@ -196,6 +196,11 @@ For live actors supply a local model through standard
 Reuse the call-limit, profiling and bounded Ollama configuration in `run.py`;
 do not silently fall back to fixture behavior on model errors. Zero embeddings
 in the teaching snippet are not a realistic basic-agent retrieval setup.
+For real local vectors use the optional callable adapter described in
+[GAME.md](GAME.md#optional-local-memory-embeddings). The same embedder can be
+passed directly to standard `generic.Simulation` in this terminal example.
+Record the selected embedding model alongside the actor model and assumptions;
+one small successful retrieval probe is not evidence of general memory quality.
 
 Humanizing a known resident via `human_readers` is supported. Arbitrary roster
 size is **not** a one-line Bellwether option: add role/prefab instances, parser

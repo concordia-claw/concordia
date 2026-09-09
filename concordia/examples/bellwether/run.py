@@ -21,6 +21,7 @@ import time
 
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.bellwether import game_service
+from concordia.examples.bellwether import local_embeddings
 from concordia.examples.bellwether import multiplayer
 from concordia.examples.bellwether import researcher
 from concordia.examples.bellwether import service
@@ -53,6 +54,13 @@ def main(argv=None):
       '--resident-prefab', choices=('minimal', 'basic'), default='minimal'
   )
   parser.add_argument('--model', default='llama3.2:3b')
+  parser.add_argument(
+      '--embedding-model',
+      help=(
+          'Already-installed local Ollama embedding model; default is a'
+          ' constant placeholder.'
+      ),
+  )
   parser.add_argument(
       '--recipe',
       choices=researcher.RECIPES,
@@ -94,6 +102,8 @@ def main(argv=None):
     parser.error('--recipe requires --mode fixture or live')
   if args.recipe != 'bellwether' and args.dispute_file:
     parser.error('--dispute-file requires --recipe bellwether')
+  if args.embedding_model and args.mode == 'slice':
+    parser.error('--embedding-model requires --mode fixture or live')
   dispute = (
       json.loads(args.dispute_file.read_text(encoding='utf-8'))
       if args.dispute_file
@@ -101,6 +111,11 @@ def main(argv=None):
   )
   profile = profiler.ProfilerContext()
   profile.enable()
+  embedder = (
+      local_embeddings.OllamaEmbedder(args.embedding_model, profiler=profile)
+      if args.embedding_model
+      else None
+  )
   model = None
   if args.mode == 'live':
     model = call_limit_wrapper.CallLimitLanguageModel(
@@ -126,6 +141,7 @@ def main(argv=None):
           args.output,
           port=args.editor_port,
           model=model,
+          embedder=embedder,
           actor_logic=args.resident_prefab,
           recipe=args.recipe,
           dispute=dispute,
@@ -140,6 +156,8 @@ def main(argv=None):
           ),
       )
   )
+  if embedder is not None:
+    game.embedding.update(kind='local_ollama', model=args.embedding_model)
   player = simulation_server.SimulationServer(
       port=args.player_port,
       html_content=pathlib.Path(__file__)

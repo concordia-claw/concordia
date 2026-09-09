@@ -44,6 +44,41 @@ params in `game_prefab.configuration`. The human uses HumanAct, not an LLM.
 The GM uses independently composed SwitchAct policies and explicit scenario
 rules, not the resident decision logic.
 
+## Optional local memory embeddings
+
+The compatibility default is an eight-dimensional **constant placeholder**.
+It permits fixture plumbing but does not provide meaningful semantic retrieval,
+including when live residents use `basic`. To use real local embeddings, install
+an embedding-capable model separately in your existing Ollama service:
+
+```sh
+ollama pull all-minilm
+python -m concordia.examples.bellwether.run --mode live --model llama3.2:3b --resident-prefab basic --embedding-model all-minilm --output runs/bellwether-embeddings
+```
+
+The optional adapter feeds the standard `generic.Simulation` callable-embedder
+interface and existing `AssociativeMemoryBank`; it does not replace retrieval.
+It uses only `127.0.0.1:11434`, does not inherit proxy settings, and makes no
+automatic model downloads. Capability checks happen before memory transmission.
+Requests use a 30-second HTTP timeout and reject truncation. Vectors must be
+finite, nonzero, and dimension-consistent; they are normalized because the
+standard bank scores with a dot product. A failed request is surfaced, never
+silently changed to a constant embedding.
+
+Developer state and `outcome.json` identify constant, provided-callable, or
+local-model embeddings. The existing private profiler records request counts,
+failures, timings, and dimensions—not memory text or vectors. This metadata is
+not added to player views. Model dimensions, vocabulary and latency vary;
+`all-minilm` has a short input context and can reject long memories. Choose an
+appropriate installed model for your text rather than silently truncating it.
+This is not a quality benchmark or a guarantee that a chosen actor architecture
+will use associative retrieval. Do not mix a saved bank's vectors with a different
+model or placeholder; checkpoint compatibility/continuation is not implemented.
+
+Trusted Python callers can instead pass `embedder=callable` to `Game` or
+`SharedGame`, using their existing embedding library. No web configuration can
+load arbitrary Python callables. Slice mode keeps its original fixture default.
+
 ## Playing
 
 Select suggestions to fill the input, or enter a command and your own words.

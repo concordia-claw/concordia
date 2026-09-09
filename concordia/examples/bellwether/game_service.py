@@ -44,6 +44,7 @@ class Game(service.Bellwether):
       output,
       *,
       model=None,
+      embedder=None,
       actor_logic='minimal',
       recipe='bellwether',
       dispute=None,
@@ -75,6 +76,7 @@ class Game(service.Bellwether):
         port=port,
         config_factory=configuration,
         model=model or game_prefab.FixtureModel(),
+        embedder=embedder,
         max_steps=64,
     )
     self.world.lock = self.operations.lock
@@ -232,6 +234,7 @@ class Game(service.Bellwether):
                     self.profiler.get_stats() if self.profiler else None
                 ),
                 'model_cost': None,
+                'embedding': copy.deepcopy(self.embedding),
             },
             ensure_ascii=False,
             indent=2,
