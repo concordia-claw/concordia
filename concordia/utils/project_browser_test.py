@@ -23,9 +23,11 @@ import json
 import threading
 from unittest import mock
 
+from concordia.environment import step_controller
 from concordia.language_model import no_language_model
 from concordia.prefabs.simulation import generic
 from concordia.utils import simulation_server
+from concordia.utils import visual_interface
 import pytest
 
 from examples.project_editor import run
@@ -248,3 +250,74 @@ def test_two_tabs_reject_stale_and_active_draft(browser):
     browser_api.expect(a.locator('#project-status')).to_contain_text(
         'Run: completed'
     )
+
+
+def test_completed_project_can_start_a_fresh_controllable_run(
+    browser, tmp_path
+):
+  built = []
+  second_bound = threading.Event()
+  finish = threading.Event()
+
+  def fixture(config):
+    simulation = run.build(config)
+    built.append(simulation)
+    server.set_simulation(simulation)
+    checkpoint = simulation.make_checkpoint_data()
+    server.set_runtime_html_content(
+        visual_interface.visualize_config_to_html(
+            config, checkpoint_data=checkpoint
+        )
+    )
+    server.broadcast_entity_info(checkpoint)
+    if len(built) == 1:
+      server.broadcast_step(
+          step_controller.StepData(4, 'Alice', 'Synthetic callback', {}, {})
+      )
+    else:
+      second_bound.set()
+      finish.wait(10)
+    server.broadcast_completion()
+
+  with (
+      mock.patch.object(generic.Simulation, 'play', side_effect=AssertionError),
+      mock.patch.object(
+          no_language_model.NoLanguageModel,
+          'sample_text',
+          side_effect=AssertionError,
+      ),
+      mock.patch.object(
+          no_language_model.NoLanguageModel,
+          'sample_choice',
+          side_effect=AssertionError,
+      ),
+      editor(fixture) as (server, url),
+      browser.new_context(viewport={'width': 1100, 'height': 760}) as context,
+  ):
+    initial = context.new_page()
+    runtime = context.new_page()
+    errors = []
+    for page in (initial, runtime):
+      page.on('pageerror', lambda error: errors.append(str(error)))
+    initial.goto(url)
+    initial.get_by_role('button', name='Run saved project').click()
+    browser_api.expect(initial.locator('#project-status')).to_contain_text(
+        'Run: completed'
+    )
+    runtime.goto(url + 'runtime')
+    browser_api.expect(runtime.locator('#run-status')).to_have_text('Completed')
+    browser_api.expect(runtime.locator('#step-counter')).to_have_text('4')
+    initial.get_by_role('button', name='Run saved project').click()
+    try:
+      assert second_bound.wait(2)
+      runtime.reload()
+      browser_api.expect(runtime.locator('#run-status')).to_have_text('Running')
+      browser_api.expect(runtime.locator('#step-counter')).to_have_text('0')
+      runtime.locator('#btn-pause').click()
+      browser_api.expect(runtime.locator('#run-status')).to_have_text('Paused')
+      browser_api.expect(runtime.locator('#btn-step')).to_be_enabled()
+      runtime.screenshot(path=str(tmp_path / 'fresh-runtime.png'))
+      assert built[0] is not built[1]
+      assert not errors
+    finally:
+      finish.set()

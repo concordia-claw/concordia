@@ -30,9 +30,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from concordia.environment import step_controller as step_controller_lib
+from concordia.typing import prefab as prefab_lib
 from concordia.utils import browser_sessions as browser_sessions_lib
 from concordia.utils import operation_service as operation_service_lib
-from concordia.typing import prefab as prefab_lib
 from concordia.utils import project_config
 from concordia.utils import visual_interface
 
@@ -445,11 +445,19 @@ class SimulationServer:
       self._check_project_revision(revision)
       config = self._project_registry.to_config(self._project_document)
       self._project_run = {'status': 'active', 'revision': revision}
-      self._step_controller = step_controller_lib.StepController(
-          start_paused=False
-      )
-      self._current_step_data = {}
-      self._cached_entity_info = None
+      with self._server_sent_events_lock:
+        # The saved draft starts a new run, not a continuation of the old one.
+        # Do not expose its terminal flag, retained state or controls while the
+        # trusted runner is constructing and binding the next Simulation.
+        self._step_controller = step_controller_lib.StepController(
+            start_paused=False
+        )
+        self._simulation = None
+        self._completed = False
+        self._current_step_data = {}
+        self._cached_entity_info = None
+        self._status_revision += 1
+        self._broadcast_locked(self._status_event_locked())
       self._runtime_html = ''
       self._project_thread = threading.Thread(
           target=self._run_project, args=(config,), daemon=True
@@ -766,7 +774,11 @@ class SimulationServer:
             )
           self._send_json(result)
         except (
-            KeyError, ValueError, TypeError, UnicodeError, RecursionError
+            KeyError,
+            ValueError,
+            TypeError,
+            UnicodeError,
+            RecursionError,
         ) as error:
           self._send_json({'error': str(error)}, 400)
 
