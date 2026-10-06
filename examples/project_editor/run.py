@@ -37,6 +37,7 @@ from concordia.environment.engines import simultaneous
 from concordia.language_model import language_model
 from concordia.language_model import no_language_model
 from concordia.prefabs.simulation import generic
+from concordia.typing import entity_component
 from concordia.typing import prefab as prefab_lib
 from concordia.utils import async_measurements
 from concordia.utils import project_config
@@ -74,7 +75,7 @@ class ModelSelection:
   @property
   def label(self) -> str:
     if self.backend == 'none':
-      return 'Free mock · NoLanguageModel · output is a development stub'
+      return 'NoLanguageModel · no model API calls · output is a development stub'
     label = f'Live model configured · {self.backend} · {self.model_name}'
     if self.backend == 'together_ai':
       label += (
@@ -147,15 +148,12 @@ def build(
     # measurements, as in examples/social_media. They are host-owned objects,
     # never part of a saved project.
     reactive = async_measurements.ReactiveMeasurements()
-    config = dataclasses.replace(
-        config,
-        instances=[
-            dataclasses.replace(
-                instance, params={**instance.params, 'measurements': reactive}
-            )
-            for instance in config.instances
-        ],
-    )
+    instances = []
+    for instance in config.instances:
+      params = dict(instance.params)
+      params['measurements'] = reactive  # pyrefly: ignore[unsupported-operation]
+      instances.append(dataclasses.replace(instance, params=params))
+    config = dataclasses.replace(config, instances=instances)
   return generic.Simulation(
       config=config,
       model=model if model is not None else no_language_model.NoLanguageModel(),
@@ -180,6 +178,8 @@ def forum_html(simulation: generic.Simulation | None) -> str:
   """Render the standard ForumState of a running simulation, if it has one."""
   if simulation is not None:
     for game_master in simulation.get_game_masters():
+      if not isinstance(game_master, entity_component.EntityWithComponents):
+        continue
       try:
         forum = game_master.get_component(
             forum_lib.DEFAULT_FORUM_COMPONENT_KEY, type_=forum_lib.ForumState

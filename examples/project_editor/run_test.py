@@ -112,7 +112,7 @@ def test_open_builds_preview_without_running():
     assert service is not None
     state = service.snapshot('developer')['result']
     assert state['state'] == 'ready'
-    assert 'Free mock' in server.html_content
+    assert 'no model API calls' in server.html_content
     fields = state['definition']['inspector']['conversation']
     assert 'acting_order' in fields
     assert state['document']['max_steps'] == 40
@@ -337,7 +337,7 @@ def test_default_selection_uses_standard_no_model():
   assert isinstance(
       run.ModelSelection().create_model(), no_language_model.NoLanguageModel
   )
-  assert 'Free mock' in run.ModelSelection().label
+  assert 'no model API calls' in run.ModelSelection().label
 
 
 @pytest.mark.parametrize(
@@ -366,7 +366,7 @@ def test_live_selection_uses_standard_factory_without_sampling():
       api_key=None,
       disable_language_model=False,
   )
-  assert 'Free mock' not in selection.label
+  assert 'no model API calls' not in selection.label
   assert 'together_ai' in selection.label
   assert 'provider/model' in selection.label
 
@@ -401,7 +401,7 @@ def test_live_preview_edit_save_never_initializes_provider():
     assert 'Live model configured' in server.html_content
     assert 'together_ai' in server.html_content
     assert 'provider/model' in server.html_content
-    assert 'Free mock' not in server.html_content
+    assert 'no model API calls' not in server.html_content
     document = server.get_project()['document']
     document['instances'][0]['params']['goal'] = 'Alice wants a quiet evening.'
     saved = server.replace_project(template.registry().dumps(document), 0)
@@ -449,7 +449,7 @@ def test_forum_viewer_renders_forum_state_or_explains_absence():
   assert 'No forum yet' in run.forum_html(None)
   forum = mock.Mock()
   forum.to_html.return_value = '<h1>Crumbleton Notice Board</h1>'
-  game_master = mock.Mock()
+  game_master = mock.Mock(spec=entity_agent.EntityAgent)
   game_master.name = 'Notice Board'
   game_master.get_component.return_value = forum
   simulation = mock.Mock()

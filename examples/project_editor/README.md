@@ -31,8 +31,10 @@ simulation maximum. Adjust **Steps to run** for each run.
 
 The saved maximum is 40 engine steps; **Steps to run** initially requests 10.
 Use `--engine sequential` (default), `--engine simultaneous` or
-`--engine asynchronous` to choose the example's engine. Its actual class is
-shown as **Engine** in the editor. With the asynchronous engine the launcher
+`--engine asynchronous` to choose the example's engine. Sequential is for
+turn-based games: each step, one entity takes its turn. Simultaneous lets every
+player act in the same step, and asynchronous lets each player act at its own
+pace. The actual class is shown as **Engine** in the editor. With the asynchronous engine the launcher
 gives every instance one shared `ReactiveMeasurements` object, as
 `examples/social_media` does; it is host-owned and never saved in a project.
 Applications can supply another standard `Engine` through `create_editor`'s
