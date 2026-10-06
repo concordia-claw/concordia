@@ -29,13 +29,16 @@ import uuid
 import warnings
 
 from concordia.contrib import language_models
+from concordia.contrib.components.game_master import forum as forum_lib
 from concordia.environment import engine as engine_lib
+from concordia.environment.engines import asynchronous
 from concordia.environment.engines import sequential
 from concordia.environment.engines import simultaneous
 from concordia.language_model import language_model
 from concordia.language_model import no_language_model
 from concordia.prefabs.simulation import generic
 from concordia.typing import prefab as prefab_lib
+from concordia.utils import async_measurements
 from concordia.utils import project_config
 from concordia.utils import simulation_server
 import numpy as np
@@ -138,11 +141,26 @@ def build(
     engine: engine_lib.Engine | None = None,
 ) -> generic.Simulation:
   """Build standard prefabs without executing them or making model calls."""
+  engine = engine if engine is not None else sequential.Sequential()
+  if isinstance(engine, asynchronous.Asynchronous):
+    # The asynchronous engine coordinates players through shared reactive
+    # measurements, as in examples/social_media. They are host-owned objects,
+    # never part of a saved project.
+    reactive = async_measurements.ReactiveMeasurements()
+    config = dataclasses.replace(
+        config,
+        instances=[
+            dataclasses.replace(
+                instance, params={**instance.params, 'measurements': reactive}
+            )
+            for instance in config.instances
+        ],
+    )
   return generic.Simulation(
       config=config,
       model=model if model is not None else no_language_model.NoLanguageModel(),
       embedder=lambda _: np.ones(8),
-      engine=engine if engine is not None else sequential.Sequential(),
+      engine=engine,
   )
 
 
@@ -158,6 +176,25 @@ def save_result(registry, document, log, output: Path) -> Path:
   return destination
 
 
+def forum_html(simulation: generic.Simulation | None) -> str:
+  """Render the standard ForumState of a running simulation, if it has one."""
+  if simulation is not None:
+    for game_master in simulation.get_game_masters():
+      try:
+        forum = game_master.get_component(
+            forum_lib.DEFAULT_FORUM_COMPONENT_KEY, type_=forum_lib.ForumState
+        )
+      except (KeyError, TypeError):
+        continue
+      return forum.to_html(title=game_master.name)
+  return (
+      '<p style="font-family:sans-serif">No forum yet. Run a project whose'
+      ' game master keeps a ForumState (for example'
+      ' game_master.async_social_media.GameMaster), then press Refresh'
+      ' viewer.</p>'
+  )
+
+
 def create_editor(
     document: dict | None = None,
     *,
@@ -167,6 +204,7 @@ def create_editor(
     public_origin: str | None = None,
     model_selection: ModelSelection = ModelSelection(),
     engine_factory: Callable[[], engine_lib.Engine] = sequential.Sequential,
+    title: str = 'Roommate music lab',
 ) -> simulation_server.SimulationServer:
   """Configure, but do not start or run, the existing SimulationServer.
 
@@ -184,12 +222,14 @@ def create_editor(
   server = simulation_server.SimulationServer(
       port=port, public_origin=public_origin
   )
+  current: dict[str, generic.Simulation] = {}
 
   def run(config: prefab_lib.Config, requested_steps: int) -> None:
     saved_definition = server.get_project()['document']
     sim = build(
         config, model=model_selection.create_model(), engine=engine_factory()
     )
+    current['simulation'] = sim
     controller = server.step_controller
     server.set_simulation(sim)
     server.broadcast_entity_info(sim.make_checkpoint_data())
@@ -235,11 +275,9 @@ def create_editor(
       initial,
       run_with_steps=run,
       integrated=True,
-      title=(
-          f'Roommate music lab · {model_selection.label} · '
-          f'{step_delay:g}s pacing'
-      ),
+      title=f'{title} · {model_selection.label} · {step_delay:g}s pacing',
       preview=lambda config: build(config, engine=engine_factory()),
+      viewers={'Forum': lambda: forum_html(current.get('simulation'))},
   )
   return server
 
@@ -290,8 +328,12 @@ def main() -> None:
   engines = {
       'sequential': sequential.Sequential,
       'simultaneous': simultaneous.Simultaneous,
+      'asynchronous': asynchronous.Asynchronous,
   }
   parser.add_argument('--engine', choices=tuple(engines), default='sequential')
+  parser.add_argument(
+      '--title', default='Roommate music lab', help='Editor heading'
+  )
   args = parser.parse_args()
   try:
     selection = ModelSelection(args.model_backend, args.model_name)
@@ -347,6 +389,7 @@ def main() -> None:
       public_origin=args.public_origin,
       model_selection=selection,
       engine_factory=engines[args.engine],
+      title=args.title,
   )
   server.start()
   editor_origin = args.public_origin or f'http://127.0.0.1:{server.bound_port}'

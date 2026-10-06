@@ -1,0 +1,68 @@
+{
+  "schema_version": 4,
+  "template": "entity-workbench-v1",
+  "instances": [
+    {
+      "id": "narrator",
+      "prototype": "installed:game_master.situated_in_time_and_place.GameMaster",
+      "prefab": "game_master.situated_in_time_and_place.GameMaster",
+      "role": "game_master",
+      "params": {
+        "name": "Narrator",
+        "extra_event_resolution_steps": "",
+        "clock_description": "Each step is one character’s turn and moves time forward by about thirty minutes. Turns rotate so that every character gets to act. The party begins at noon in the Throne Room.",
+        "start_time": "8:00 AM on Queen Marigold’s hundredth birthday",
+        "locations": "Wizard’s Tower: Fizzwick’s cluttered workshop of bubbling potions and spellbooks. Royal Kitchen: ovens, flour and Mabel’s spotless counters. Throne Room: being decorated for the party; the Queen arrives at noon. Castle Garden: a lily pond, rose bushes and a sundial."
+      }
+    },
+    {
+      "id": "fizzwick",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Fizzwick",
+        "goal": "Fizzwick is an over-enthusiastic apprentice wizard who has never met a spell worth not trying. Fizzwick wants to turn Gerald back into the royal birthday cake before noon, ideally without anyone finding out. Fizzwick’s turns are short: one or two sentences.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "reginald",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Sir Reginald",
+        "goal": "Sir Reginald is an elderly and extremely formal knight who believes any problem can be solved with a proper quest and a strongly worded letter. He is determined that the Queen’s birthday goes perfectly, and he suspects foul play. His turns are short: one or two sentences.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "mabel",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Mabel",
+        "goal": "Mabel is the royal baker: practical, unflappable and fond of saying ’well, that won’t do.’ She wants a cake on the Queen’s table by noon, even if she has to bake a new one from scratch. Her turns are short: one or two sentences.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "gerald",
+      "prefab": "minimal",
+      "role": "entity",
+      "params": {
+        "name": "Gerald",
+        "custom_instructions": "Gerald is a toad who, until this morning, was the Queen’s birthday cake. He is unfailingly polite, speaks in complete sentences, would very much prefer not to be eaten, and is not shy about joining in. His turns are short: one or two sentences.",
+        "goal": "Gerald wants to decide whether he would rather stay a toad or become a cake again.",
+        "randomize_choices": false
+      },
+      "prototype": "alice"
+    }
+  ],
+  "premise": "It is eight o’clock on the morning of Queen Marigold’s hundredth birthday in the hilltop kingdom of Crumbleton. The party starts at noon in the Throne Room. At dawn, Fizzwick the apprentice wizard tried to make the royal cake extra magnificent and accidentally turned it into a very polite toad named Gerald. Fizzwick and Gerald are in the Wizard’s Tower. Mabel the baker has just noticed that the cake is missing from the Royal Kitchen. Sir Reginald is in the Throne Room, inspecting the decorations with a magnifying glass.",
+  "max_steps": 12,
+  "components": [],
+  "dynamic_states": {}
+}

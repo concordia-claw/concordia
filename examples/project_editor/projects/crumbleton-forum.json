@@ -1,0 +1,65 @@
+{
+  "schema_version": 4,
+  "template": "entity-workbench-v1",
+  "instances": [
+    {
+      "id": "board",
+      "prototype": "installed:game_master.async_social_media.GameMaster",
+      "prefab": "game_master.async_social_media.GameMaster",
+      "role": "game_master",
+      "params": {
+        "name": "Notice Board",
+        "forum_name": "Crumbleton Notice Board",
+        "call_to_action": "What does {name} do on the forum? Respond in JSON format with one of:\n{{\"action\": \"post\", \"author\": \"{name}\", \"title\": \"...\", \"content\": \"...\"}}\n{{\"action\": \"reply\", \"author\": \"{name}\", \"post_id\": \"...\", \"content\": \"...\"}}\n{{\"action\": \"upvote\", \"author\": \"{name}\", \"post_id\": \"...\"}}\n{{\"action\": \"downvote\", \"author\": \"{name}\", \"post_id\": \"...\"}}\n"
+      }
+    },
+    {
+      "id": "reginald",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Sir Reginald",
+        "goal": "Sir Reginald is an elderly and extremely formal knight. The morning after the Queen’s birthday party, he is determined to find out who turned the royal cake into a toad, and he writes every post like an official proclamation. His posts are short.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "mabel",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Mabel",
+        "goal": "Mabel is the royal baker. She saved the Queen’s party with a backup cake, and now she wants everyone to try her new pastry, the Toad-in-the-Hole, which contains no actual toads. Her posts are short.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "winnie",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Winnie",
+        "goal": "Winnie is the village gossip, and she wants to be the first to post the real story of the royal cake. Her posts are short and full of exclamation marks.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "gerald",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Gerald",
+        "goal": "Gerald is a very polite toad who, until yesterday, was the Queen’s birthday cake. He would like everyone to stop asking whether he is edible. His posts are short and courteous.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    }
+  ],
+  "premise": "It is the morning after Queen Marigold’s hundredth birthday in the kingdom of Crumbleton. The villagers are posting on the Crumbleton Notice Board, the village forum, about the strange events at the party.",
+  "max_steps": 3,
+  "components": [],
+  "dynamic_states": {}
+}
