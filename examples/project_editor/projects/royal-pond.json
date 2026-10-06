@@ -1,0 +1,65 @@
+{
+  "schema_version": 4,
+  "template": "entity-workbench-v1",
+  "instances": [
+    {
+      "id": "keeper",
+      "prototype": "installed:contrib.game_master.simultaneous_resolution_gm.GameMasterSimultaneous",
+      "prefab": "contrib.game_master.simultaneous_resolution_gm.GameMasterSimultaneous",
+      "role": "game_master",
+      "params": {
+        "name": "Pond Keeper",
+        "clock_description": "Each step is one fifteen-minute fishing round.",
+        "start_time": "Friday, March 20, 2026 at 6:00 AM",
+        "locations": "The Royal Fish Pond: an enchanted pond in the Castle Garden, shared by the whole village.",
+        "game_rules": "The Royal Fish Pond is enchanted and shared by Old Tom, Hilda and Barnaby. It starts with 30 fish. Each round, every fisher privately decides how many fish to catch, from 0 to 10, without knowing what the others will choose. After each round, the pond’s magic doubles the fish that remain, up to a maximum of 30. If the pond ever reaches zero fish, it stays empty forever. After each round, announce each fisher’s catch and the number of fish left in the pond.",
+        "allow_early_termination": false,
+        "time_period_minutes": 15,
+        "use_variable_increments": false,
+        "use_gm_working_memory": false,
+        "use_location_based_filter": false,
+        "use_narrative_history_manager": false,
+        "use_npc_events": false,
+        "npc_scenario_context": "A generic setting.",
+        "call_to_action": "How many fish does {name} catch this round, from 0 to 10, and what does {name} say? Answer in one or two sentences that state the exact number."
+      }
+    },
+    {
+      "id": "tom",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Old Tom",
+        "goal": "Old Tom has fished the Royal Fish Pond for fifty years and still remembers the year it ran dry. He wants the pond to stay full for his grandchildren. His turns are short: one or two sentences, and he always says exactly how many fish he catches.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "hilda",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Hilda",
+        "goal": "Hilda runs the Crumbleton Inn and needs fish for her guests every day. She will catch what she needs, but she does not want to be the one who empties the pond. Her turns are short: one or two sentences, and she always says exactly how many fish she catches.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    },
+    {
+      "id": "barnaby",
+      "prefab": "basic",
+      "role": "entity",
+      "params": {
+        "name": "Barnaby",
+        "goal": "Barnaby is a young, ambitious fishmonger who dreams of opening a second shop. He wants to catch as many fish as he can sell. His turns are short: one or two sentences, and he always says exactly how many fish he catches.",
+        "randomize_choices": false
+      },
+      "prototype": "bob"
+    }
+  ],
+  "premise": "It is the first morning of spring in Crumbleton. The enchanted Royal Fish Pond holds 30 fish. Old Tom, Hilda and Barnaby are the only villagers allowed to fish it, and in every round all three fish at the same time.",
+  "max_steps": 4,
+  "components": [],
+  "dynamic_states": {}
+}

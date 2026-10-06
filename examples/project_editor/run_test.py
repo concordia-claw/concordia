@@ -112,7 +112,7 @@ def test_open_builds_preview_without_running():
     assert service is not None
     state = service.snapshot('developer')['result']
     assert state['state'] == 'ready'
-    assert 'Free mock' in server.html_content
+    assert 'no model API calls' in server.html_content
     fields = state['definition']['inspector']['conversation']
     assert 'acting_order' in fields
     assert state['document']['max_steps'] == 40
@@ -337,7 +337,7 @@ def test_default_selection_uses_standard_no_model():
   assert isinstance(
       run.ModelSelection().create_model(), no_language_model.NoLanguageModel
   )
-  assert 'Free mock' in run.ModelSelection().label
+  assert 'no model API calls' in run.ModelSelection().label
 
 
 @pytest.mark.parametrize(
@@ -366,7 +366,7 @@ def test_live_selection_uses_standard_factory_without_sampling():
       api_key=None,
       disable_language_model=False,
   )
-  assert 'Free mock' not in selection.label
+  assert 'no model API calls' not in selection.label
   assert 'together_ai' in selection.label
   assert 'provider/model' in selection.label
 
@@ -401,7 +401,7 @@ def test_live_preview_edit_save_never_initializes_provider():
     assert 'Live model configured' in server.html_content
     assert 'together_ai' in server.html_content
     assert 'provider/model' in server.html_content
-    assert 'Free mock' not in server.html_content
+    assert 'no model API calls' not in server.html_content
     document = server.get_project()['document']
     document['instances'][0]['params']['goal'] = 'Alice wants a quiet evening.'
     saved = server.replace_project(template.registry().dumps(document), 0)
@@ -421,6 +421,85 @@ def test_build_passes_supplied_model_to_standard_simulation():
         model=selected,
     )
   assert simulation.call_args.kwargs['model'] is selected
+
+
+def test_asynchronous_build_shares_host_owned_measurements():
+  config = template.registry().to_config(
+      template.registry().default_document(template.TEMPLATE_KEY)
+  )
+  with mock.patch.object(run.generic, 'Simulation') as simulation:
+    run.build(config, engine=run.asynchronous.Asynchronous())
+  instances = simulation.call_args.kwargs['config'].instances
+  measurements = {id(i.params['measurements']) for i in instances}
+  assert len(measurements) == 1
+  assert isinstance(
+      instances[0].params['measurements'],
+      run.async_measurements.ReactiveMeasurements,
+  )
+  assert all('measurements' not in i.params for i in config.instances)
+  with mock.patch.object(run.generic, 'Simulation') as simulation:
+    run.build(config)
+  assert all(
+      'measurements' not in i.params
+      for i in simulation.call_args.kwargs['config'].instances
+  )
+
+
+def test_forum_viewer_renders_forum_state_or_explains_absence():
+  assert 'No forum yet' in run.forum_html(None)
+  forum = mock.Mock()
+  forum.to_html.return_value = '<h1>Crumbleton Notice Board</h1>'
+  game_master = mock.Mock(spec=entity_agent.EntityAgent)
+  game_master.name = 'Notice Board'
+  game_master.get_component.return_value = forum
+  simulation = mock.Mock()
+  simulation.get_game_masters.return_value = [game_master]
+  assert run.forum_html(simulation) == '<h1>Crumbleton Notice Board</h1>'
+  forum.to_html.assert_called_once_with(title='Notice Board')
+  game_master.get_component.side_effect = KeyError('no forum')
+  assert 'No forum yet' in run.forum_html(simulation)
+
+
+def test_cli_engine_and_title_reach_the_editor():
+  with (
+      mock.patch.object(
+          sys,
+          'argv',
+          ['editor', '--engine', 'asynchronous', '--title', 'Notice Board'],
+      ),
+      mock.patch.object(run, 'create_editor') as create,
+      mock.patch.object(run.time, 'sleep', side_effect=KeyboardInterrupt),
+  ):
+    run.main()
+  kwargs = create.call_args.kwargs
+  assert kwargs['engine_factory'] is run.asynchronous.Asynchronous
+  assert kwargs['title'] == 'Notice Board'
+
+
+@pytest.mark.parametrize(
+    'name,engine,game_master,players',
+    [
+        ('royal-cake.json', 'sequential', 'Narrator', 4),
+        ('royal-pond.json', 'simultaneous', 'Pond Keeper', 3),
+        ('crumbleton-forum.json', 'asynchronous', 'Notice Board', 4),
+    ],
+)
+def test_bundled_projects_load_and_build(name, engine, game_master, players):
+  registry = template.registry()
+  path = Path(run.__file__).parent / 'projects' / name
+  document = registry.loads(path.read_text(encoding='utf-8'))
+  engines = {
+      'sequential': run.sequential.Sequential,
+      'simultaneous': run.simultaneous.Simultaneous,
+      'asynchronous': run.asynchronous.Asynchronous,
+  }
+  config = registry.to_config(document)
+  with mock.patch.object(
+      generic.Simulation, 'play', side_effect=AssertionError
+  ):
+    simulation = run.build(config, engine=engines[engine]())
+  assert [gm.name for gm in simulation.get_game_masters()] == [game_master]
+  assert len(simulation.get_entities()) == players
 
 
 @pytest.mark.parametrize('requested', [None, 3, 40])

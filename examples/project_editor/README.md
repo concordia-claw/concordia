@@ -30,16 +30,51 @@ the standard simulation. The initial request is 10 steps, capped by the saved
 simulation maximum. Adjust **Steps to run** for each run.
 
 The saved maximum is 40 engine steps; **Steps to run** initially requests 10.
-Use `--engine sequential` (default) or `--engine simultaneous` to choose the
-example's engine. Its actual class is shown as **Engine** in the editor.
+Use `--engine sequential` (default), `--engine simultaneous` or
+`--engine asynchronous` to choose the example's engine. Sequential is for
+turn-based games: each step, one entity takes its turn. Simultaneous lets every
+player act in the same step, and asynchronous lets each player act at its own
+pace. The actual class is shown as **Engine** in the editor. With the asynchronous engine the launcher
+gives every instance one shared `ReactiveMeasurements` object, as
+`examples/social_media` does; it is host-owned and never saved in a project.
 Applications can supply another standard `Engine` through `create_editor`'s
-trusted `engine_factory` argument; no module names from project JSON are imported.
+trusted `engine_factory` argument; no module names from project JSON are
+imported. `--title` sets the editor heading.
+
+Every run is built with the standard generic simulation prefab
+(`concordia.prefabs.simulation.generic.Simulation`).
 
 The engine sends actions and completion/failure state to Simulation log.
 Completed runs write `initial-project.json`, standard `log.json`, and portable
 `log.html` into a unique subdirectory of `project-run/`. Choose another output
 location with `--output`. JSON exports from the editor contain the design;
 logs contain execution records and may include prompts or memories.
+
+### Other games
+
+The editor's catalog includes every installed prefab, so other games are
+ordinary project files. The `projects/` directory has three, one for each
+engine:
+
+```sh
+# A situated game master with a clock and locations (sequential engine).
+python -m examples.project_editor.run --project examples/project_editor/projects/royal-cake.json
+# A commons dilemma: every fisher acts each step (simultaneous engine).
+python -m examples.project_editor.run --engine simultaneous \
+  --project examples/project_editor/projects/royal-pond.json
+# A forum where each villager posts at their own pace (asynchronous engine).
+python -m examples.project_editor.run --engine asynchronous \
+  --project examples/project_editor/projects/crumbleton-forum.json
+```
+
+The pond uses the contrib prefab
+`contrib.game_master.simultaneous_resolution_gm.GameMasterSimultaneous`, whose
+next-acting component (`NextActingAllEntities`) selects every player each step.
+Its rounds are 15 minutes long because that prefab's narrative resolution asks
+for about 25 words per simulated minute. The forum uses
+`game_master.async_social_media.GameMaster`; choose **Forum** in **Central
+viewer** (or run `viewer Forum` in a terminal) to read its posts. The viewer
+renders the standard `ForumState` component of the current run.
 
 ## Configure a language model
 
