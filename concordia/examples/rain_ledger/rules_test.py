@@ -78,6 +78,7 @@ class ConsequencesTest(unittest.TestCase):
         'publish redacted',
         'go mutual',
         'settle self',
+        'settle self',
     ):
       act(ledger, action)
     self.assertTrue(ledger.public()['stayed'])
@@ -178,6 +179,64 @@ class ResidentPolicyTest(unittest.TestCase):
     self.assertEqual(len(ledger.public()['evidence']), 1)
     act(ledger, 'go press')
     self.assertIn('Two independent sources', act(ledger, 'publish named'))
+
+
+class RecoveryTest(unittest.TestCase):
+
+  def test_confidentiality_terms_precede_acceptance_and_breach_is_repayable(
+      self,
+  ):
+    ledger = rules.Ledger()
+    for command in (
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon bargain',
+    ):
+      act(ledger, command)
+    cash = ledger.public()['cash']
+    self.assertIn('terms in writing', act(ledger, 'settle self'))
+    self.assertEqual(ledger.public()['cash'], cash)
+    act(ledger, 'settle self')
+    act(ledger, 'go press')
+    act(ledger, 'publish named')
+    self.assertIn(
+        'Mutual repayment: $35 after confidentiality breach',
+        ledger.public()['debts'],
+    )
+    act(ledger, 'go mutual')
+    self.assertIn('release', act(ledger, 'repay mutual'))
+    self.assertTrue(ledger.public()['stayed'])
+    self.assertFalse(ledger.public()['debts'])
+
+  def test_declining_job_does_not_decline_main_case(self):
+    ledger = rules.Ledger()
+    for command in (
+        'go records',
+        'go mutual',
+        'job photograph',
+        'refuse photograph',
+    ):
+      act(ledger, command)
+    self.assertEqual(ledger.public()['case'], 'unaccepted')
+    self.assertEqual(ledger.public()['jobs']['photograph'], 'complete:declined')
+    self.assertFalse(ledger.public()['photo_exposed'])
+
+  def test_provider_failure_has_no_invented_npc_action(self):
+    class Unavailable:
+
+      def sample_text(self, *args, **kwargs):
+        raise ConnectionError('local daemon unavailable')
+
+    ledger = rules.Ledger()
+    session = game.RainSession(ledger)
+    policy = game.ResidentAct(Unavailable(), 'Nessa Rook', session)
+    self.assertIn('unavailable', policy.get_action_attempt({}, None))
+    self.assertEqual(ledger.public()['shelter_beds'], 0)
+    self.assertIn(
+        'no resident consequence', session.snapshot()['entries'][-1]['text']
+    )
 
 
 if __name__ == '__main__':

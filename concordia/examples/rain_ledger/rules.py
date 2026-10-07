@@ -45,6 +45,7 @@ VERBS = (
     'deliver',
     'copy',
     'barter',
+    'repay',
 )
 METHODS = ('careful', 'bargain', 'stealth', 'force', 'pay', 'sell', 'warn')
 
@@ -78,6 +79,7 @@ class Ledger(entity_component.ContextComponent):
         'case': 'unaccepted',
         'published': [],
         'settlement': '',
+        'retainer_terms_seen': False,
         'neighbourhood': 'Notices posted; families still at home.',
         'npc_turns': {name: 0 for name in c.NPCS},
         'agendas': {name: 0 for name in c.NPCS},
@@ -329,6 +331,29 @@ class Ledger(entity_component.ContextComponent):
       s['location'] = target
       return c.PLACES[target][1], True
     if verb == 'refuse':
+      if target in c.JOBS:
+        if s['jobs'].get(target) not in ('decision', 'carrying'):
+          return 'There is no active offer of that job to decline.', False
+        if target == 'medicine' and location != 'clinic':
+          return (
+              (
+                  'Return the cold case to Pell at the clinic before declining'
+                  ' the delivery.'
+              ),
+              False,
+          )
+        if target == 'medicine':
+          s['inventory'].remove('cold medicine')
+        s['jobs'][target] = 'complete:declined'
+        return (
+            (
+                'You return the commission without selling anyone out. No fee,'
+                ' no penalty; the main case is unchanged.'
+            ),
+            True,
+        )
+      if target not in ('case', '', 'ada'):
+        return 'Specify the case or an active job you want to decline.', False
       s['case'] = 'declined'
       return (
           (
@@ -725,6 +750,15 @@ class Ledger(entity_component.ContextComponent):
         s['trust'][target] += 1
       return f'“I’ll hold you to that.” Recorded promise: {promise}.', True
     if verb == 'protect':
+      if target not in ('iona', 'source', 'witness', ''):
+        return (
+            (
+                'The known safehouse arrangement is for Iona. Name a different'
+                ' concrete proposal in your own words; no protection has been'
+                ' assigned.'
+            ),
+            False,
+        )
       if location not in ('cafe', 'clinic'):
         return (
             (
@@ -791,6 +825,12 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      breached = 'Mutual confidentiality clause' in s['promises']
+      if breached:
+        s['promises'].remove('Mutual confidentiality clause')
+        s['debts'].append('Mutual repayment: $35 after confidentiality breach')
+        s['heat'] = min(5, s['heat'] + 2)
+        s['trust']['holt'] -= 2
       s['published'] = list(sources)
       s['stayed'] = True
       s['case'] = 'public inquiry'
@@ -810,6 +850,11 @@ class Ledger(entity_component.ContextComponent):
             'The records tell the story without naming a protected witness.'
             ' Vera prints the dates twice. “So nobody can say they misread'
             ' them.”'
+        )
+      if breached:
+        result += (
+            ' Mutual serves the advertised $35 repayment demand; legal heat'
+            ' rises by two. The newspaper still publishes.'
         )
       return (
           result
@@ -840,6 +885,18 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      if target == 'self' and not s['retainer_terms_seen']:
+        s['retainer_terms_seen'] = True
+        return (
+            (
+                'Holt puts the terms in writing: $35 for consultancy, no money'
+                ' for families, and a confidentiality clause. Publishing'
+                ' afterwards creates a $35 repayment obligation and legal heat.'
+                ' You keep the evidence. Repeat settle self to sign, or demand'
+                ' settle families instead.'
+            ),
+            False,
+        )
       s['settlement'] = target
       if target == 'families':
         s['relocation'] = True
@@ -857,6 +914,7 @@ class Ledger(entity_component.ContextComponent):
             True,
         )
       s['cash'] += 35
+      s['promises'].append('Mutual confidentiality clause')
       s['trust']['nessa'] -= 2
       # Private payment cannot repeal a public stay or erase relocation bonds.
       return (
@@ -866,6 +924,52 @@ class Ledger(entity_component.ContextComponent):
               ' change sides, but nobody forgets the payment.'
           ),
           True,
+      )
+    if verb == 'repay':
+      debt = 'Mutual repayment: $35 after confidentiality breach'
+      if target == 'mutual' and location == 'mutual' and debt in s['debts']:
+        if s['cash'] < 35:
+          return (
+              (
+                  'The written demand is $35. Earn the balance or leave the'
+                  ' obligation outstanding; your inquiry remains public.'
+              ),
+              False,
+          )
+        s['cash'] -= 35
+        s['debts'].remove(debt)
+        s['heat'] = max(0, s['heat'] - 1)
+        s['trust']['holt'] += 1
+        return (
+            (
+                'Holt stamps the release before taking your money. One point of'
+                ' legal heat falls. The public story and the fact you broke the'
+                ' clause remain on record.'
+            ),
+            True,
+        )
+      if (
+          target == 'rent'
+          and location == 'office'
+          and 'office rent' in s['debts']
+      ):
+        if s['cash'] < 3:
+          return 'You need $3 to clear the deferred office rent.', False
+        s['cash'] -= 3
+        s['debts'].remove('office rent')
+        return (
+            (
+                'The landlord writes paid beside the deferred rent. Your office'
+                ' remains open.'
+            ),
+            True,
+        )
+      return (
+          (
+              'Repay Mutual at its office, or deferred rent at your own.'
+              ' Personal favours require the promised work.'
+          ),
+          False,
       )
     if verb == 'rest':
       if location not in ('office', 'clinic', 'cafe'):

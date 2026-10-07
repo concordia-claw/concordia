@@ -137,7 +137,7 @@ state and logs, not deterministic engine cursors or model sampling.
 | Natural-language freedom | scoped interpretation of supported affordances; unbounded roleplay is not implemented |
 | CLI discovery | demonstrated against live developer listener |
 | Logs/search/export | standard smoke log searched and bundled; live export awaits final run verification |
-| Restore/branch | composed with standard loader; full final roundtrip demonstration pending |
+| Restore/branch | standard loader restored smoke checkpoint in isolated instance; edited branch left source unchanged; model/engine cursors are not replayed |
 | Mobile browser | actual Chromium390x844 screenshots and reconnect check; physical Android untested |
 | Tailnet | coordinator owns isolated route; final URL/HTTP verification pending |
 
@@ -155,7 +155,7 @@ scripted; `--live` uses existing local llama3.2:3b with a40-call cap. Follow the
 workspace's simulation-launch acknowledgement procedure before running it.
 
 All game-specific mechanics live in Ledger, a standard ContextComponent;
-PortAuthority and ResidentAct implement standard ActingComponent contracts.
+PortAuthority extends standard SwitchAct hooks; FixedActionSpec/Constant retain standard routing contracts. ResidentAct implements the standard ActingComponent contract.
 Standard minimal prefabs supply memory/context, generic.Simulation supplies
 composition/checkpoints, ReactiveMeasurements and AsyncLogCollector supply logs,
 StepController supplies boundaries, and HumanSession/its unchanged browser JS

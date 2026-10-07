@@ -21,7 +21,9 @@ import threading
 
 import numpy as np
 from concordia.components.agent import human_act_component
-from concordia.components.game_master import event_resolution
+from concordia.components.agent import constant
+from concordia.components.game_master import next_acting
+from concordia.components.game_master import switch_act
 from concordia.environment.engines import asynchronous
 from concordia.examples.astral_canticle import human_io
 from concordia.examples.rain_ledger import content as c
@@ -82,22 +84,34 @@ class ResidentAct(
 ):
   """Local model chooses a bounded agenda action using only its own observations."""
 
-  def __init__(self, model, name):
+  def __init__(self, model, name, session):
     super().__init__()
-    self.model, self.name = model, name
+    self.model, self.name, self.session = model, name, session
 
   def get_action_attempt(self, contexts, action_spec):
     person = c.NPCS[self.name]
-    response = self.model.sample_text(
-        f"You are {self.name}. {person['voice']} Goal: {person['goal']}\n"
-        f"Private knowledge: {person['knowledge']}\n"
-        + '\n'.join(contexts.values())
-        + f"\nChoose one action from {person['moves']}. Return JSON with move"
-        ' and a brief line spoken only to yourself. Do not invent other'
-        " people's actions.",
-        max_tokens=130,
-        temperature=0.6,
-    )
+    try:
+      response = self.model.sample_text(
+          f"You are {self.name}. {person['voice']} Goal: {person['goal']}\n"
+          f"Private knowledge: {person['knowledge']}\n"
+          + '\n'.join(contexts.values())
+          + f"\nChoose one action from {person['moves']}. Return JSON with move"
+          ' and a brief line spoken only to yourself. Do not invent other'
+          " people's actions.",
+          max_tokens=130,
+          temperature=0.6,
+      )
+    except (
+        Exception
+    ) as exc:  # Local provider failure is not an invented action.
+      self._logging_channel(
+          {'actor': self.name, 'provider_failure': type(exc).__name__}
+      )
+      self.session.add_observation(
+          f'Local model unavailable for {self.name}; no resident consequence'
+          ' was invented.'
+      )
+      return '{"move":"unavailable"}'
     self._logging_channel({'actor': self.name, 'proposal': response})
     return response
 
@@ -108,70 +122,70 @@ class ResidentAct(
     pass
 
 
-class PortAuthority(
-    entity_component.ActingComponent, entity_component.ComponentWithLogging
-):
-  """Scenario action rules; standard engine owns all scheduling and threading."""
+class PortAuthority(switch_act.SwitchAct):
+  """Extend standard SwitchAct hooks with Port Mercy's bounded scenario rules.
+
+  Base SwitchAct owns output-type dispatch and standard fixed-spec/termination
+  components. Hooks execute in the caller's thread, preserving engine-provided
+  capture keys; parallel context hooks must not guess an actor from thread ID.
+  """
 
   def __init__(self, ledger, model, session):
-    super().__init__()
+    super().__init__(model=model, entity_names=(c.PLAYER, *c.NPCS))
     self.ledger, self.model, self.session = ledger, model, session
 
-  def get_action_attempt(self, contexts, action_spec):
+  def _next_acting(self, contexts, action_spec):
     del contexts
-    kind = action_spec.output_type
+    s = self.ledger.get_state()
+    return ', '.join(
+        name
+        for name in action_spec.options
+        if name == c.PLAYER or s['npc_turns'][name] < s['turn']
+    )
+
+  def _make_observation(self, contexts, action_spec):
+    del contexts, action_spec
     actor = self.get_entity().get_capture_key_for_thread(threading.get_ident())
-    if kind == entity_lib.OutputType.TERMINATE:
-      return 'No'
-    if kind == entity_lib.OutputType.NEXT_ACTING:
-      # First engine setup call has every actor as options. Each actual actor
-      # loop subsequently asks with its own singleton option.
-      s = self.ledger.get_state()
-      return ', '.join(
-          name
-          for name in action_spec.options
-          if name == c.PLAYER or s['npc_turns'][name] < s['turn']
-      )
-    if kind == entity_lib.OutputType.NEXT_ACTION_SPEC:
-      return json.dumps({
-          'call_to_action': (
-              'What do you attempt? Use your own words or a suggested starting'
-              ' point.'
-          ),
-          'output_type': 'free',
-          'options': [],
-      })
-    if kind == entity_lib.OutputType.MAKE_OBSERVATION:
-      if actor == c.PLAYER:
-        return self.ledger.view()
-      s = self.ledger.get_state()
-      local = {
-          'Nessa Rook': {
-              'shelter_beds': s['shelter_beds'],
-              'petition': s['petition'],
-          },
-          'Silas Marr': {'union_support': s['union_support']},
-          'Edwin Holt': {
-              'security': s['security'],
-              'bond_offer': s['bond_offer'],
-          },
-      }
-      return (
-          str(local.get(actor, {}))
-          + f" Your completed agenda actions: {s['agendas'].get(actor, 0)}."
-          ' Public notices: '
-          + ' '.join(s['news'][-4:])
-          + '\nEvents witnessed at your workplace: '
-          + ' '.join(s['witnessed'].get(actor, [])[-4:])
-      )
-    if kind != entity_lib.OutputType.RESOLVE:
-      raise ValueError(f'Unsupported GM request: {kind}')
+    if actor == c.PLAYER:
+      return self.ledger.view()
+    s = self.ledger.get_state()
+    local = {
+        'Nessa Rook': {
+            'shelter_beds': s['shelter_beds'],
+            'petition': s['petition'],
+        },
+        'Silas Marr': {'union_support': s['union_support']},
+        'Edwin Holt': {
+            'security': s['security'],
+            'bond_offer': s['bond_offer'],
+        },
+    }
+    return (
+        str(local.get(actor, {}))
+        + f" Your completed agenda actions: {s['agendas'].get(actor, 0)}."
+        ' Public notices: '
+        + ' '.join(s['news'][-4:])
+        + '\nEvents witnessed at your workplace: '
+        + ' '.join(s['witnessed'].get(actor, [])[-4:])
+    )
+
+  def _resolve(self, contexts, action_spec):
+    del contexts, action_spec
+    actor = self.get_entity().get_capture_key_for_thread(threading.get_ident())
     with self.ledger.lock:
       attempt = self.ledger.pending.pop(actor, None)
     if attempt is None:
       raise RuntimeError(f'No actor-scoped attempt for {actor}')
     if actor == c.PLAYER:
-      intent = rules.parse_intent(attempt, self.model, self.ledger)
+      try:
+        intent = rules.parse_intent(attempt, self.model, self.ledger)
+      except Exception as exc:
+        self._logging_channel({'provider_failure': type(exc).__name__})
+        intent = {}
+        self.session.add_observation(
+            'Local interpretation is unavailable. No time or resources were'
+            ' spent; exact shorthand remains available.'
+        )
       result = self.ledger.resolve(intent, attempt)
       target = intent.get('target')
       if (
@@ -180,7 +194,14 @@ class PortAuthority(
           and c.CONTACTS[target][1] == self.ledger.public()['location']
           and len(attempt.split()) > 3
       ):
-        result += self.dialogue(target, attempt, result)
+        try:
+          result += self.dialogue(target, attempt, result)
+        except Exception as exc:
+          self._logging_channel({'dialogue_failure': type(exc).__name__})
+          result += (
+              '\nLocal dialogue unavailable; the recorded response above'
+              ' stands.'
+          )
       self.session.add_observation(result)
     else:
       try:
@@ -233,12 +254,6 @@ class PortAuthority(
       )
     return f'\n{name}: “{line.strip()}”'
 
-  def get_state(self):
-    return {}
-
-  def set_state(self, state):
-    pass
-
 
 def configuration(ledger, session):
   """Runtime bindings in prefab closures keep locks out of prefab JSON."""
@@ -272,7 +287,7 @@ def configuration(ledger, session):
       ).build(
           model,
           memory_bank,
-          act_component=ResidentAct(model, self.params['name']),
+          act_component=ResidentAct(model, self.params['name'], session),
       )
 
   class City(prefab.Prefab):
@@ -283,7 +298,20 @@ def configuration(ledger, session):
           params={
               **self.params,
               'measurements': async_measurements.ReactiveMeasurements(),
-              'extra_components': {'Ledger': ledger},
+              'extra_components': {
+                  'Ledger': ledger,
+                  switch_act.DEFAULT_TERMINATE_COMPONENT_KEY: constant.Constant(
+                      'No'
+                  ),
+                  switch_act.DEFAULT_NEXT_ACTION_SPEC_COMPONENT_KEY: next_acting.FixedActionSpec(
+                      entity_lib.free_action_spec(
+                          call_to_action=(
+                              'What do you attempt? Use your own words or a'
+                              ' suggested starting point.'
+                          )
+                      )
+                  ),
+              },
           }
       ).build(
           model,
