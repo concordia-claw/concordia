@@ -43,6 +43,10 @@ class _TextFormatOptions(TypedDict, total=False):
   format: Literal['json'] | dict[str, Any]
 
 
+class _ThinkingOptions(TypedDict, total=False):
+  think: bool
+
+
 class OllamaLanguageModel(language_model.LanguageModel):
   """Language Model that uses Ollama LLM models."""
 
@@ -51,6 +55,7 @@ class OllamaLanguageModel(language_model.LanguageModel):
       model_name: str,
       *,
       system_message: str = _DEFAULT_SYSTEM_MESSAGE,
+      think: bool | None = None,
       measurements: measurements_lib.Measurements | None = None,
       channel: str = language_model.DEFAULT_STATS_CHANNEL,
       request_timeout: float | None = None,
@@ -64,6 +69,10 @@ class OllamaLanguageModel(language_model.LanguageModel):
           https://github.com/ollama/ollama.
         system_message: System message to prefix to requests when prompting the
           model.
+        think: Optional provider thinking control for supported Ollama models.
+          None preserves the provider default and omits the request field.
+          False can reduce response latency; it can also change answer quality.
+          Reasoning traces are never returned as the sampled answer.
         measurements: The measurements object to log usage statistics to.
         channel: The channel to write the statistics to.
         request_timeout: Optional HTTP timeout in seconds for local requests.
@@ -83,6 +92,12 @@ class OllamaLanguageModel(language_model.LanguageModel):
       self._text_format_options['format'] = copy.deepcopy(dict(response_format))
     elif response_format == 'json':
       self._text_format_options['format'] = 'json'
+
+    if think is not None and type(think) is not bool:
+      raise ValueError('think must be a boolean or None')
+    self._thinking_options: _ThinkingOptions = {}
+    if think is not None:
+      self._thinking_options['think'] = think
     self._model_name = model_name
     self._client = ollama.Client(timeout=request_timeout)
     if max_output_tokens is not None and max_output_tokens <= 0:
@@ -129,6 +144,7 @@ class OllamaLanguageModel(language_model.LanguageModel):
         },
         keep_alive='10m',
         **self._text_format_options,
+        **self._thinking_options,
     )
     result = response['response']
 
@@ -185,6 +201,7 @@ class OllamaLanguageModel(language_model.LanguageModel):
           },
           format=choice_schema,
           keep_alive='10m',
+          **self._thinking_options,
       )
       try:
         json_data_response = json.loads(response['response'])
