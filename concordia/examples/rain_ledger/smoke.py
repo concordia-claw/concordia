@@ -24,6 +24,7 @@ import threading
 import time
 
 from concordia.examples.rain_ledger import game
+from concordia.examples.rain_ledger import rules
 from concordia.language_model import no_language_model
 
 
@@ -49,6 +50,8 @@ def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--output', type=pathlib.Path, required=True)
   parser.add_argument('--live', action='store_true')
+  parser.add_argument('--model', default='llama3.2:3b')
+  parser.add_argument('--no-think', action='store_true')
   args = parser.parse_args()
   if args.live:
     from concordia.contrib.language_models.ollama import ollama_model
@@ -56,11 +59,14 @@ def main():
 
     model = call_limit_wrapper.CallLimitLanguageModel(
         ollama_model.OllamaLanguageModel(
-            'llama3.2:3b',
+            args.model,
+            think=False if args.no_think else None,
             request_timeout=60,
             max_output_tokens=180,
+            response_format=None,
             system_message=(
-                'Follow the JSON request. Return only the requested object.'
+                'Follow the requested format. Choose only a supplied option'
+                ' when asked to choose.'
             ),
         ),
         max_calls=40,
@@ -126,7 +132,12 @@ def main():
     assert (
         not instance.controller.at_pause_boundary
     ), 'pending human is not quiescent'
-    cli('ledger.cash', {'value': 999}, expected_code=2)
+    rejection = cli('ledger.cash', {'value': 999}, expected_code=2)
+    assert (
+        json.loads(rejection.stderr)['error']['code']
+        == 'paused_boundary_required'
+    )
+    assert instance.ledger.public()['cash'] == 18
     cli('run.resume')
     actions = [
         'go cafe',
@@ -157,6 +168,7 @@ def main():
       previous = pending['id']
       if index == len(actions) - 1:
         cli('run.pause_after_action')
+      before_turn = instance.ledger.public()['turn']
       assert instance.session.submit(previous, action)
       assert not instance.session.submit(previous, action), 'duplicate applied'
       until(
@@ -166,11 +178,35 @@ def main():
           )
           or errors
       )
+      if args.live and index in (0, 2):
+        until(
+            lambda: (p := instance.session.snapshot()['pending'])
+            and p['id'] != previous
+            or errors
+        )
+        proposal = instance.ledger.public()['proposal']
+        assert proposal, 'Natural input must produce a reviewable proposal'
+        wanted = ('go', 'cafe') if index == 0 else ('protect', 'iona')
+        assert (
+            proposal['intent']['verb'],
+            proposal['intent']['target'],
+        ) == wanted
+        assert instance.ledger.public()['turn'] == before_turn
+        previous = instance.session.snapshot()['pending']['id']
+        assert instance.session.submit(previous, 'confirm')
+        assert not instance.session.submit(previous, 'confirm')
+        until(
+            lambda: instance.ledger.public()['turn'] == before_turn + 1
+            or errors
+        )
     until(lambda: instance.controller.at_pause_boundary or errors)
     assert not errors, errors
     before = instance.ledger.get_state()
     assert before['turn'] == len(actions), before
     assert all(v > 0 for v in before['npc_turns'].values()), before['npc_turns']
+    assert all(
+        v > 0 for v in before['agendas'].values()
+    ), 'No valid real resident action for some actor: ' + str(before['agendas'])
     cli('ledger.cash', {'value': 27})
     cli('checkpoint.save')
     cli('log.export')
@@ -192,7 +228,7 @@ def main():
     assert not errors, errors
     evidence = {
         'cli_transcript': cli_transcript,
-        'backend': 'llama3.2:3b' if args.live else 'fixture',
+        'backend': args.model if args.live else 'fixture',
         'actions': actions,
         'pending_pause_edit_rejected': True,
         'pause_after_quiescent': True,

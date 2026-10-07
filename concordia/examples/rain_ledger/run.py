@@ -20,6 +20,7 @@ import pathlib
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.astral_canticle import web
 from concordia.examples.rain_ledger import game
+from concordia.examples.rain_ledger import rules
 from fastapi.responses import FileResponse
 import uvicorn
 
@@ -29,6 +30,11 @@ def main():
   parser.add_argument('--port', type=int, default=8795)
   parser.add_argument('--editor-port', type=int, default=8796)
   parser.add_argument('--model', default='llama3.2:3b')
+  parser.add_argument(
+      '--no-think',
+      action='store_true',
+      help='Disable thinking for a supported local model, per request only.',
+  )
   parser.add_argument('--output', type=pathlib.Path, required=True)
   parser.add_argument(
       '--resume',
@@ -48,11 +54,13 @@ def main():
     )
   model = ollama_model.OllamaLanguageModel(
       args.model,
+      think=False if args.no_think else None,
       request_timeout=60,
       max_output_tokens=180,
+      response_format=None,
       system_message=(
-          'Follow the requested JSON format. You are playing one character, not'
-          ' narrating the whole world.'
+          'Follow the requested format. Choose only a supplied option when'
+          ' asked to choose.'
       ),
   )
   instance = game.Game(

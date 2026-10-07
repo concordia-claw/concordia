@@ -15,16 +15,24 @@
 """Compose Rain Ledger with standard prefabs, Asynchronous and shared controls."""
 
 import json
+from absl import logging
+
+import dataclasses
+import types
 import pathlib
-import re
 import threading
+from typing import cast
+
+from concordia.agents import entity_agent_with_logging
 
 import numpy as np
 from concordia.components.agent import human_act_component
 from concordia.components.agent import constant
+from concordia.components.agent import concat_act_component
 from concordia.components.game_master import next_acting
 from concordia.components.game_master import switch_act
 from concordia.environment.engines import asynchronous
+from concordia.environment import engine as engine_lib
 from concordia.examples.astral_canticle import human_io
 from concordia.examples.rain_ledger import content as c
 from concordia.examples.rain_ledger import rules
@@ -37,6 +45,7 @@ from concordia.utils import async_measurements
 from concordia.utils import operation_service as ops
 from concordia.utils import simulation_server
 from concordia.utils import structured_logging
+from concordia.environment import step_controller
 
 PUBLIC_JOBS = {
     'tools': 'Recover a crew’s pawned tools. Offered fee $12.',
@@ -50,14 +59,38 @@ PUBLIC_JOBS = {
 class RainSession(human_io.HumanSession):
   """Use the existing inbox/retry contract, adding only scenario presentation."""
 
-  def __init__(self, ledger):
+  def __init__(self, ledger, *, restored=False):
     super().__init__(initial_status='Port Mercy — opening the office')
     self.ledger = ledger
     self.pause_after = False
-    self.add_observation(c.OPENING)
+    self.controller: step_controller.StepController | None = None
+    if not restored:
+      self.add_observation(c.OPENING)
+    else:
+      self.add_observation(
+          'Returned to Port Mercy. Your recorded case follows; the casebook'
+          ' shows your current position.'
+      )
+
+  def __call__(self, request):
+    # The GM publishes resolved player outcomes exactly once. Retain the full
+    # standard actor context in the request, but do not duplicate its memory
+    # observation history into the presentation transcript at every new prompt.
+    return super().__call__(
+        dataclasses.replace(
+            request,
+            contexts=types.MappingProxyType({
+                **request.contexts,
+                '__observation__': '',
+            }),
+        )
+    )
 
   def snapshot(self):
     result = super().snapshot()
+    if self.controller is not None and self.controller.at_pause_boundary:
+      result['status'] = 'Paused safely. Read, inspect or resume when ready.'
+      result['revision'] = str(result['revision']) + ':paused'
     result.update(
         casebook=self.ledger.public(),
         suggestions=self.ledger.available(),
@@ -79,31 +112,18 @@ class RainSession(human_io.HumanSession):
     return result
 
 
-class ResidentAct(
-    entity_component.ActingComponent, entity_component.ComponentWithLogging
-):
-  """Local model chooses a bounded agenda action using only its own observations."""
+class ResidentAct(concat_act_component.ConcatActComponent):
+  """Standard ConcatAct choice policy, with explicit no-effect provider failure."""
 
   def __init__(self, model, name, session):
-    super().__init__()
-    self.model, self.name, self.session = model, name, session
+    super().__init__(model=model, randomize_choices=False)
+    self.name, self.session = name, session
 
   def get_action_attempt(self, contexts, action_spec):
-    person = c.NPCS[self.name]
     try:
-      response = self.model.sample_text(
-          f"You are {self.name}. {person['voice']} Goal: {person['goal']}\n"
-          f"Private knowledge: {person['knowledge']}\n"
-          + '\n'.join(contexts.values())
-          + f"\nChoose one action from {person['moves']}. Return JSON with move"
-          ' and a brief line spoken only to yourself. Do not invent other'
-          " people's actions.",
-          max_tokens=130,
-          temperature=0.6,
-      )
-    except (
-        Exception
-    ) as exc:  # Local provider failure is not an invented action.
+      return super().get_action_attempt(contexts, action_spec)
+    except Exception as exc:
+      logging.exception('Resident inference failed for %s', self.name)
       self._logging_channel(
           {'actor': self.name, 'provider_failure': type(exc).__name__}
       )
@@ -111,15 +131,7 @@ class ResidentAct(
           f'Local model unavailable for {self.name}; no resident consequence'
           ' was invented.'
       )
-      return '{"move":"unavailable"}'
-    self._logging_channel({'actor': self.name, 'proposal': response})
-    return response
-
-  def get_state(self):
-    return {}
-
-  def set_state(self, state):
-    pass
+      return 'wait'
 
 
 class PortAuthority(switch_act.SwitchAct):
@@ -140,12 +152,39 @@ class PortAuthority(switch_act.SwitchAct):
     return ', '.join(
         name
         for name in action_spec.options
-        if name == c.PLAYER or s['npc_turns'][name] < s['turn']
+        if name == c.PLAYER
+        or (
+            s['npc_turns'][name] < s['turn']
+            and self.ledger.resident_moves(name)
+        )
     )
+
+  def _next_entity_action_spec(self, contexts, action_spec):
+    actor = cast(
+        entity_agent_with_logging.EntityAgentWithLogging, self.get_entity()
+    ).get_capture_key_for_thread(threading.get_ident())
+    if actor in c.NPCS:
+      return engine_lib.action_spec_to_string(
+          entity_lib.choice_action_spec(
+              call_to_action=(
+                  'Choose one practical step for {name}, using only their own'
+                  ' knowledge and observations. Choose wait only if neither'
+                  ' action is appropriate.'
+              ),
+              options=(*self.ledger.resident_moves(actor), 'wait'),
+          )
+      )
+    return super()._next_entity_action_spec(contexts, action_spec)
 
   def _make_observation(self, contexts, action_spec):
     del contexts, action_spec
-    actor = self.get_entity().get_capture_key_for_thread(threading.get_ident())
+    actor = cast(
+        entity_agent_with_logging.EntityAgentWithLogging, self.get_entity()
+    ).get_capture_key_for_thread(threading.get_ident())
+    if actor is None:
+      raise RuntimeError(
+          'Port Mercy requires the standard engine actor capture.'
+      )
     if actor == c.PLAYER:
       return self.ledger.view()
     s = self.ledger.get_state()
@@ -154,14 +193,19 @@ class PortAuthority(switch_act.SwitchAct):
             'shelter_beds': s['shelter_beds'],
             'petition': s['petition'],
         },
-        'Silas Marr': {'union_support': s['union_support']},
+        'Silas Marr': {
+            'union_support': s['union_support'],
+            'public_guard_pressure': s['security'],
+        },
         'Edwin Holt': {
             'security': s['security'],
             'bond_offer': s['bond_offer'],
         },
     }
     return (
-        str(local.get(actor, {}))
+        c.NPCS[actor]['affordances']
+        + '\nCurrent local conditions: '
+        + str(local.get(actor, {}))
         + f" Your completed agenda actions: {s['agendas'].get(actor, 0)}."
         ' Public notices: '
         + ' '.join(s['news'][-4:])
@@ -171,31 +215,50 @@ class PortAuthority(switch_act.SwitchAct):
 
   def _resolve(self, contexts, action_spec):
     del contexts, action_spec
-    actor = self.get_entity().get_capture_key_for_thread(threading.get_ident())
+    actor = cast(
+        entity_agent_with_logging.EntityAgentWithLogging, self.get_entity()
+    ).get_capture_key_for_thread(threading.get_ident())
+    if actor is None:
+      raise RuntimeError(
+          'Port Mercy requires the standard engine actor capture.'
+      )
     with self.ledger.lock:
       attempt = self.ledger.pending.pop(actor, None)
     if attempt is None:
       raise RuntimeError(f'No actor-scoped attempt for {actor}')
+    dialogue_log = None
     if actor == c.PLAYER:
       try:
         intent = rules.parse_intent(attempt, self.model, self.ledger)
       except Exception as exc:
+        logging.exception('Player interpretation failed')
         self._logging_channel({'provider_failure': type(exc).__name__})
         intent = {}
         self.session.add_observation(
             'Local interpretation is unavailable. No time or resources were'
             ' spent; exact shorthand remains available.'
         )
+      confirmed = (
+          self.ledger.public().get('proposal')
+          if intent.get('verb') == 'confirm'
+          else None
+      )
       result = self.ledger.resolve(intent, attempt)
-      target = intent.get('target')
+      effective = confirmed['intent'] if confirmed else intent
+      spoken_attempt = (
+          confirmed.get('attempt', attempt) if confirmed else attempt
+      )
+      target = effective.get('target')
       if (
-          intent.get('verb') == 'talk'
+          not intent.get('_needs_confirmation')
+          and effective.get('verb') == 'talk'
           and target in c.CONTACTS
           and c.CONTACTS[target][1] == self.ledger.public()['location']
-          and len(attempt.split()) > 3
+          and len(spoken_attempt.split()) > 3
       ):
         try:
-          result += self.dialogue(target, attempt, result)
+          speech, dialogue_log = self.dialogue(target, spoken_attempt, result)
+          result += speech
         except Exception as exc:
           self._logging_channel({'dialogue_failure': type(exc).__name__})
           result += (
@@ -204,25 +267,23 @@ class PortAuthority(switch_act.SwitchAct):
           )
       self.session.add_observation(result)
     else:
-      try:
-        match = re.search(r'\{[^{}]*\}', attempt)
-        value = json.loads(match.group() if match else '{}')
-      except (TypeError, ValueError):
-        value = {}
-      move = value.get('move') if isinstance(value, dict) else None
-      if move not in c.NPCS[actor]['moves']:
-        result = 'Resident proposal invalid; no consequence committed.'
+      if attempt not in c.NPCS[actor]['moves']:
+        result = (
+            'Resident waits; no consequence committed.'
+            if attempt == 'wait'
+            else 'Resident proposal invalid; no consequence committed.'
+        )
         with self.ledger.lock:
           self.ledger.state['npc_turns'][actor] = self.ledger.state['turn']
       else:
-        result = self.ledger.npc_resolve(
-            actor, move, str(value.get('line', ''))
-        )
+        result = self.ledger.npc_resolve(actor, attempt, '')
     self._logging_channel({
         'actor': actor,
         'attempt': attempt,
         'result': result,
         'ledger': self.ledger.get_state(),
+        'interpretation': intent if actor == c.PLAYER else None,
+        'dialogue': dialogue_log,
     })
     return result
 
@@ -230,29 +291,21 @@ class PortAuthority(switch_act.SwitchAct):
     """Character speech can respond to a subject but cannot grant game effects."""
     name, _, voice = c.CONTACTS[contact]
     text = self.model.sample_text(
-        f'You speak as {name}. Voice: {voice}\nThe investigator says:'
-        f' {attempt}\nOnly established facts and binding stance for your reply:'
-        f' {ruling}\nReply to the actual subject in two short noir sentences.'
-        ' Do not add names, clues, facts, promises, locations, actions,'
-        ' payments or relationship changes. Preserve any refusal. No rain'
-        ' metaphors. Return JSON with only line.',
-        max_tokens=130,
+        f'Speak in FIRST PERSON as {name}. Voice: {voice}\n'
+        f'The investigator asks: {attempt}\n'
+        f'Established facts and binding stance: {ruling}\n'
+        'Answer the actual question in one or two NEW short sentences. Do not'
+        ' repeat the recorded wording or narrate stage directions. Do not add'
+        ' names, clues, facts, promises, actions, payments or relationship'
+        ' changes. Preserve any refusal. No rain metaphors. Plain spoken text'
+        ' only, no JSON or speaker label.',
+        max_tokens=100,
         temperature=0.4,
     )
-    try:
-      match = re.search(r'\{[^{}]*\}', text)
-      line = json.loads(match.group() if match else '{}').get('line', '')
-    except (ValueError, AttributeError):
-      line = ''
-    self._logging_channel(
-        {'speaker': name, 'subject': attempt, 'model_reply': text}
-    )
-    if not isinstance(line, str) or not line.strip():
-      return (
-          '\nThe conversation adds no clear reply; the recorded facts above'
-          ' stand.'
-      )
-    return f'\n{name}: “{line.strip()}”'
+    record = {'speaker': name, 'subject': attempt, 'model_reply': text}
+    if not text.strip():
+      return '\nNo further reply; the recorded facts stand.', record
+    return f'\n{name}: “{text.strip()}”', record
 
 
 def configuration(ledger, session):
@@ -265,7 +318,7 @@ def configuration(ledger, session):
       return minimal.Entity(
           params={
               **self.params,
-              'measurements': async_measurements.ReactiveMeasurements(),
+              'measurements': async_measurements.ReactiveMeasurements(),  # pyrefly: ignore[bad-assignment]
           }
       ).build(
           model,
@@ -282,7 +335,7 @@ def configuration(ledger, session):
       return minimal.Entity(
           params={
               **self.params,
-              'measurements': async_measurements.ReactiveMeasurements(),
+              'measurements': async_measurements.ReactiveMeasurements(),  # pyrefly: ignore[bad-assignment]
           }
       ).build(
           model,
@@ -297,11 +350,11 @@ def configuration(ledger, session):
       return minimal.Entity(
           params={
               **self.params,
-              'measurements': async_measurements.ReactiveMeasurements(),
-              'extra_components': {
+              'measurements': async_measurements.ReactiveMeasurements(),  # pyrefly: ignore[bad-assignment]
+              'extra_components': {  # pyrefly: ignore[bad-assignment]
                   'Ledger': ledger,
                   switch_act.DEFAULT_TERMINATE_COMPONENT_KEY: constant.Constant(
-                      'No'
+                      'No', pre_act_label=''
                   ),
                   switch_act.DEFAULT_NEXT_ACTION_SPEC_COMPONENT_KEY: next_acting.FixedActionSpec(
                       entity_lib.free_action_spec(
@@ -344,7 +397,11 @@ def configuration(ledger, session):
               prefab.Role.ENTITY,
               {
                   'name': name,
-                  'custom_instructions': value['voice'],
+                  'custom_instructions': (
+                      value['voice']
+                      + '\nPrivate knowledge: '
+                      + value['knowledge']
+                  ),
                   'goal': value['goal'],
               },
           )
@@ -353,7 +410,7 @@ def configuration(ledger, session):
       + [
           prefab.InstanceConfig('city', prefab.Role.GAME_MASTER, {'name': c.GM})
       ],
-      default_max_steps=100000,
+      default_max_steps=1_000_000_000,
   )
 
 
@@ -367,13 +424,9 @@ class Game:
       self.ledger.set_state(
           json.loads((self.output / 'ledger.json').read_text())
       )
-    self.session = RainSession(self.ledger)
-    if resume:
-      for entry in self.ledger.public()['history']:
-        if entry['actor'] == c.PLAYER:
-          self.session.add_observation(
-              '> ' + str(entry['attempt']) + '\n' + entry['result']
-          )
+    self.session = RainSession(
+        self.ledger, restored=resume or checkpoint is not None
+    )
     self.config = configuration(self.ledger, self.session)
     self.engine = asynchronous.Asynchronous(sleep_time=0.2)
     self.simulation = generic.Simulation(
@@ -383,12 +436,19 @@ class Game:
       self.simulation.load_from_checkpoint(
           json.loads(pathlib.Path(checkpoint).read_text())
       )
+    if resume or checkpoint is not None:
+      for entry in self.ledger.public()['history']:
+        self.session.add_observation(
+            '> ' + str(entry['attempt']) + '\n' + entry['result']
+        )
+      self.session.add_observation(self.ledger.view())
     self.operations = ops.OperationService(project_id='rain-ledger')
     self.server = simulation_server.SimulationServer(
         port=port, operation_service=self.operations
     )
     self.server.set_simulation(self.simulation)
     self.controller = self.server.step_controller
+    self.session.controller = self.controller
     self.operations.set_view('developer', self.inspect)
     self.operations.set_view('player', self.session.snapshot)
     self._register()
@@ -399,6 +459,15 @@ class Game:
         'engine': 'Asynchronous',
         'paused': self.controller.is_paused,
         'quiescent': self.controller.at_pause_boundary,
+        'resident_goals': {
+            actor.name: (
+                cast(entity_component.EntityWithComponents, actor)
+                .get_component('Goal', type_=constant.Constant)
+                .get_state()['state']
+            )
+            for actor in self.simulation.get_entities()
+            if actor.name in c.NPCS
+        },
         'ledger': self.ledger.get_state(),
         'completed': self.completed,
     }
@@ -460,6 +529,37 @@ class Game:
             mutation=True,
         )
     )
+    self.operations.register(
+        ops.Operation(
+            'resident.goal',
+            'Edit a resident Goal through the standard component setter at'
+            ' quiescence.',
+            {
+                'actor': ops.Parameter('string', 'Resident full name.'),
+                'value': ops.Parameter(
+                    'string', 'New goal, up to 1000 characters.'
+                ),
+            },
+            self.edit_goal,
+            mutation=True,
+        )
+    )
+
+  def edit_goal(self, arguments):
+    actor, value = arguments['actor'], arguments['value']
+    if actor not in c.NPCS or not value.strip() or len(value) > 1000:
+      raise ops.OperationError(
+          'invalid_arguments',
+          'Choose a resident and a nonempty goal of at most 1000 characters.',
+      )
+    try:
+      with self.controller.paused_boundary():
+        self.simulation.set_component_dynamic_state(
+            actor, 'Goal', 'state', value
+        )
+    except ValueError as exc:
+      raise ops.OperationError('paused_boundary_required', str(exc)) from exc
+    return self.inspect()
 
   def arm_pause(self, _=None):
     self.session.pause_after = True
@@ -469,10 +569,13 @@ class Game:
     value = arguments['value']
     if type(value) is not int or not 0 <= value <= 10000:
       raise ValueError('Cash must be an integer between 0 and 10000.')
-    with self.controller.paused_boundary():
-      state = self.ledger.get_state()
-      state['cash'] = value
-      self.ledger.set_state(state)
+    try:
+      with self.controller.paused_boundary():
+        state = self.ledger.get_state()
+        state['cash'] = value
+        self.ledger.set_state(state)
+    except ValueError as exc:
+      raise ops.OperationError('paused_boundary_required', str(exc)) from exc
     return self.inspect()
 
   def checkpoint(self, _=None):
@@ -507,7 +610,7 @@ class Game:
         'html': str(self.output / 'log.html'),
     }
 
-  def play(self, *, max_steps=100000):
+  def play(self, *, max_steps=1_000_000_000):
     self.output.mkdir(parents=True, exist_ok=True)
     self.controller.play()
 

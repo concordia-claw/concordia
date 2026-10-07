@@ -19,14 +19,15 @@ All mutations take its lock; engine routing remains standard Asynchronous.
 """
 
 import copy
-import json
-import re
 import threading
+from typing import Any
 
 from concordia.typing import entity_component
 from concordia.examples.rain_ledger import content as c
 
 VERBS = (
+    'confirm',
+    'cancel',
     'go',
     'look',
     'talk',
@@ -46,6 +47,9 @@ VERBS = (
     'copy',
     'barter',
     'repay',
+    'restitution',
+    'testify',
+    'tell',
 )
 METHODS = ('careful', 'bargain', 'stealth', 'force', 'pay', 'sell', 'warn')
 
@@ -56,8 +60,8 @@ class Ledger(entity_component.ContextComponent):
   def __init__(self):
     super().__init__()
     self.lock = threading.RLock()
-    self.pending = {}
-    self.state = {
+    self.pending: dict[str, str] = {}
+    self.state: dict[str, Any] = {
         'location': 'office',
         'cash': 18,
         'injury': 0,
@@ -80,6 +84,13 @@ class Ledger(entity_component.ContextComponent):
         'published': [],
         'settlement': '',
         'retainer_terms_seen': False,
+        'proposal': None,
+        'schema_version': 2,
+        'last_intent': None,
+        'iona_confessed': False,
+        'iona_restitution': False,
+        'iona_testimony': 'unasked',
+        'ada_informed': False,
         'neighbourhood': 'Notices posted; families still at home.',
         'npc_turns': {name: 0 for name in c.NPCS},
         'agendas': {name: 0 for name in c.NPCS},
@@ -111,10 +122,13 @@ class Ledger(entity_component.ContextComponent):
     # must additionally be guarded by StepController.paused_boundary.
     if (
         not isinstance(state, dict)
-        or set(state) - set(self.state)
-        or not {'cash', 'turn', 'location', 'history', 'evidence'} <= set(state)
+        or set(state) != set(self.state)
+        or state.get('schema_version') != 2
     ):
-      raise ValueError('Restore a recognized Rain Ledger state.')
+      raise ValueError(
+          'Restore a complete Rain Ledger schema2 state. Earlier development'
+          ' saves remain archived; no implicit migration is performed.'
+      )
     state = {**copy.deepcopy(self.state), **copy.deepcopy(state)}
     for key in ('cash', 'injury', 'heat', 'turn'):
       if type(state[key]) is not int or state[key] < 0:
@@ -180,7 +194,8 @@ class Ledger(entity_component.ContextComponent):
 
   def available(self):
     s = self.public()
-    choices = [f'go {place}' for place in c.PLACES[s['location']][2]]
+    choices = ['confirm', 'cancel'] if s.get('proposal') else []
+    choices += [f'go {place}' for place in c.PLACES[s['location']][2]]
     choices += [
         f'talk {key}'
         for key, value in c.CONTACTS.items()
@@ -202,6 +217,15 @@ class Ledger(entity_component.ContextComponent):
     ]
     if 'cold medicine' in s['inventory'] and s['location'] == 'narrows':
       choices.append('deliver medicine')
+    if s['iona_confessed']:
+      if s['location'] == 'warehouse' and s['iona_testimony'] == 'unasked':
+        choices.append('testify iona')
+      if s['location'] == 'clinic' and not s['iona_restitution']:
+        choices.append('restitution iona')
+      if s['location'] == 'cafe' and not s['ada_informed']:
+        choices.append('tell ada')
+    if s['location'] == 'press' and s['evidence'] and not s['published']:
+      choices.extend(['publish redacted', 'publish named'])
     return choices + ['look', 'rest']
 
   def _record(self, actor, attempt, result, before, *, visible=False):
@@ -226,8 +250,50 @@ class Ledger(entity_component.ContextComponent):
       before = copy.deepcopy(self.state)
       s = self.state
       verb = intent.get('verb')
+      if verb == 'cancel':
+        s['proposal'] = None
+        return self._record(
+            c.PLAYER,
+            original,
+            'Proposal cancelled. Nothing was spent or committed. Write a'
+            ' correction or choose another action.',
+            before,
+        )
+      if verb == 'confirm':
+        if not s.get('proposal'):
+          return self._record(
+              c.PLAYER,
+              original,
+              'There is no proposal waiting for confirmation.',
+              before,
+          )
+        intent = s['proposal']['intent']
+        s['proposal'] = None
+        verb = intent['verb']
+      elif intent.get('_needs_confirmation') and verb in VERBS:
+        canonical = {
+            key: intent.get(key, '') for key in ('verb', 'target', 'method')
+        }
+        s['proposal'] = {
+            'intent': canonical,
+            'attempt': original,
+            'description': intent['_model_response'],
+        }
+        return self._record(
+            c.PLAYER,
+            original,
+            'You mean: '
+            + intent['_model_response']
+            + '?\nConfirm this proposal, cancel it, or write a correction. No'
+            ' time, money or consequences have been committed.',
+            before,
+        )
+      else:
+        # A new intention replaces an unconfirmed proposal, never confirms it.
+        s['proposal'] = None
       target = intent.get('target', '').lower()
       method = intent.get('method', 'careful')
+      s['last_intent'] = {'verb': verb, 'target': target, 'method': method}
       if verb not in VERBS or method not in METHODS:
         return self._record(
             c.PLAYER,
@@ -364,9 +430,87 @@ class Ledger(entity_component.ContextComponent):
           True,
       )
     if verb == 'talk':
+      if target == 'nessa' and location == 'cafe' and s['relocation']:
+        return (
+            (
+                'Nessa stacks the moving vouchers under a saucer. “The bonds'
+                ' are real. So are the empty windows. I wanted neighbours; now'
+                ' I keep forwarding addresses.” Families can leave together,'
+                ' but the old street will not follow them.'
+            ),
+            False,
+        )
+      if (
+          target == 'nessa'
+          and location == 'cafe'
+          and s['stayed']
+          and s['relief']
+      ):
+        return (
+            (
+                '“Bread first, hearings second.” Nessa puts a clean cup at your'
+                ' place. The favour you paid is recorded; the families still'
+                ' need a settlement they can live on.'
+            ),
+            False,
+        )
       if target not in c.CONTACTS or c.CONTACTS[target][1] != location:
         return (
             'They are not here. Check your contacts for their usual address.',
+            False,
+        )
+      if target == 'iona' and 'ledger' in s['evidence']:
+        if s['published'] and s['iona_testimony'] == 'voluntary':
+          return (
+              (
+                  'Iona folds the hearing summons along its old crease. “I will'
+                  ' have to answer for my signature. At least it will be mine'
+                  ' answering.” She asks you to check on Ada, not to make the'
+                  ' charge disappear.'
+              ),
+              False,
+          )
+        if not s['iona_confessed']:
+          s['iona_confessed'] = True
+          return (
+              (
+                  'Iona takes the photograph of her mother from behind the'
+                  ' clock face. “I moved twelve tenants on paper. The premium'
+                  ' difference bought her care. Creel did the rest, but that'
+                  ' line is mine.” She turns the ledger so you can read her'
+                  ' signature. “Don’t make me innocent. Make those families'
+                  ' whole.” You can fund $12 restitution at the clinic, ask her'
+                  ' to testify, pressure her, or build the case from public'
+                  ' records without using her.'
+              ),
+              False,
+          )
+        return (
+            (
+                '“A hiding place is not an acquittal.” Iona will offer a signed'
+                ' account once the twelve dollars reaches the clinic’s'
+                ' displaced families. You may refuse; she will not destroy your'
+                ' records.'
+            ),
+            False,
+        )
+      if target == 'ada' and s['ada_informed']:
+        if s['iona_testimony'] == 'voluntary':
+          return (
+              (
+                  'Ada holds the witness summons flat with both palms. “I asked'
+                  ' you to bring her back. I didn’t know which version of her I'
+                  ' meant. I’ll go with her.” She still expects the families to'
+                  ' be helped.'
+              ),
+              False,
+          )
+        return (
+            (
+                'Ada stares at the clock photograph. “She could have asked me.'
+                ' Maybe I made that hard.” She wants Iona safe, but will not'
+                ' ask you to erase the signature.'
+            ),
             False,
         )
       if target == 'ada' and s['trust']['ada'] < 0:
@@ -438,6 +582,115 @@ class Ledger(entity_component.ContextComponent):
       if target == 'ada' and s['case'] == 'unaccepted':
         s['case'] = 'offered'
       return lines[target], False
+    if verb == 'tell':
+      if target != 'ada' or location != 'cafe' or not s['iona_confessed']:
+        return (
+            (
+                'That private conversation needs Ada at the Lantern and Iona’s'
+                ' actual account, not a guess.'
+            ),
+            False,
+        )
+      if s['ada_informed']:
+        return (
+            (
+                'Ada already knows what Iona told you. Her answer remains in'
+                ' your journal.'
+            ),
+            False,
+        )
+      s['ada_informed'] = True
+      return (
+          (
+              'You show Ada the signature in private. She looks once, then'
+              ' looks away. “If she chooses to speak, I’ll stand beside her.'
+              ' Don’t choose for her.” A voluntary statement can now be used'
+              ' without betraying an uninformed sister.'
+          ),
+          True,
+      )
+    if verb == 'restitution':
+      if target != 'iona' or location != 'clinic' or not s['iona_confessed']:
+        return (
+            (
+                'Iona’s twelve-dollar restitution can be paid to Pell at the'
+                ' clinic after you hear her account.'
+            ),
+            False,
+        )
+      if s['iona_restitution']:
+        return (
+            'Pell’s receipt already records the payment; no duplicate charge.',
+            False,
+        )
+      if s['cash'] < 12:
+        return (
+            (
+                'The displaced families are owed $12. Pell has delivery work.'
+                ' Public records remain another way to pursue the case.'
+            ),
+            False,
+        )
+      s['cash'] -= 12
+      s['iona_restitution'] = True
+      s['relief'] += 2
+      return (
+          (
+              'Pell divides twelve dollars into four envelopes. “Not a pardon.'
+              ' Grocery money.” The receipt names the families, not you. Iona'
+              ' can no longer mistake being hidden for making amends.'
+          ),
+          True,
+      )
+    if verb == 'testify':
+      if target != 'iona' or location != 'warehouse' or not s['iona_confessed']:
+        return 'Ask Iona in person after hearing what she signed.', False
+      if s['iona_testimony'] == 'coerced':
+        return (
+            (
+                'Iona will not sign for you after that threat. The marked copy'
+                ' survives; pursue independent records.'
+            ),
+            False,
+        )
+      if s['iona_testimony'] == 'voluntary':
+        return (
+            (
+                'You already hold her signed account. Her consent is not a'
+                ' repeatable reward.'
+            ),
+            False,
+        )
+      if not s['protected'] or not s['iona_restitution']:
+        return (
+            (
+                'Iona refuses to sign a statement while the displaced families'
+                ' go without or she has nowhere safe to sleep. Protection and'
+                ' the $12 clinic receipt can change her answer; coercion and'
+                ' public records are different routes.'
+            ),
+            False,
+        )
+      s['iona_testimony'] = 'voluntary'
+      s['evidence']['affidavit'] = {
+          'source': 'Iona’s signed, self-incriminating affidavit',
+          'text': (
+              'Iona authenticates the counter-ledger and admits her own false'
+              ' valuation; she names Creel’s instruction with a date.'
+          ),
+          'credibility': 3,
+          'kind': 'witness',
+          'place': 'warehouse',
+      }
+      return (
+          (
+              'Iona writes “I knowingly entered” instead of “I was instructed'
+              ' to enter.” Then she signs. “Use my name if you have to. Let Ada'
+              ' hear it from you first.” The affidavit is credible because it'
+              ' admits liability, not because it invents an independent source.'
+          ),
+          True,
+      )
     if verb == 'investigate':
       if target not in s['known_leads']:
         return (
@@ -702,7 +955,8 @@ class Ledger(entity_component.ContextComponent):
       )
     if verb == 'barter':
       if target == 'holt' and location == 'mutual' and s['copies']:
-        if s['bond_offer']:
+        pledge = 'secured copy pledged for Mutual relocation audit'
+        if pledge in s['promises']:
           return (
               (
                   'The bond offer remains open. Holt will not pay twice for the'
@@ -711,6 +965,7 @@ class Ledger(entity_component.ContextComponent):
               False,
           )
         s['bond_offer'] = True
+        s['promises'].append(pledge)
         s['trust']['holt'] += 1
         return (
             (
@@ -788,8 +1043,16 @@ class Ledger(entity_component.ContextComponent):
       if location != 'press':
         return 'Take your evidence to Vera at the Evening Wire.', False
       sources = s['evidence']
+      independent = {
+          (
+              'iona-account'
+              if key in ('ledger', 'testimony', 'affidavit')
+              else key
+          )
+          for key in sources
+      }
       if (
-          len(sources) < 2
+          len(independent) < 2
           or sum(e['credibility'] for e in sources.values()) < 4
       ):
         return (
@@ -816,8 +1079,8 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
-      vulnerable = bool(set(sources) & {'ledger', 'testimony'})
-      if target == 'redacted' and vulnerable and len(sources) < 3:
+      vulnerable = bool(set(sources) & {'ledger', 'testimony', 'affidavit'})
+      if target == 'redacted' and vulnerable and len(independent) < 3:
         return (
             (
                 'Without naming a witness, Vera needs a third independent'
@@ -834,7 +1097,19 @@ class Ledger(entity_component.ContextComponent):
       s['published'] = list(sources)
       s['stayed'] = True
       s['case'] = 'public inquiry'
-      if target == 'named' and vulnerable:
+      consensual = s['iona_testimony'] == 'voluntary' and s['ada_informed']
+      if target == 'named' and vulnerable and consensual:
+        s['source_exposed'] = True
+        if 'protect Iona’s name' in s['promises']:
+          s['promises'].remove('protect Iona’s name')
+        s['trust']['ada'] += 1
+        result = (
+            'Vera prints Iona’s own admission beside the company records. Iona'
+            ' accepts a hearing summons; Ada will accompany her. Demolition'
+            ' stops, but your witness now faces a real charge. You paid for'
+            ' restitution, not immunity.'
+        )
+      elif target == 'named' and vulnerable:
         s['source_exposed'] = True
         s['trust']['ada'] -= 3
         if 'protect Iona’s name' in s['promises']:
@@ -863,7 +1138,11 @@ class Ledger(entity_component.ContextComponent):
           True,
       )
     if verb == 'settle':
-      required = 1 if s['bond_offer'] else 2
+      required = (
+          1
+          if 'secured copy pledged for Mutual relocation audit' in s['promises']
+          else 2
+      )
       if location != 'mutual' or len(s['evidence']) < required:
         return (
             (
@@ -1011,7 +1290,7 @@ class Ledger(entity_component.ContextComponent):
             ),
             True,
         )
-      if location == 'narrows':
+      if target == 'families' and location == 'narrows':
         if s['cash'] < 3:
           return 'A food parcel costs $3. Pell has paid delivery work.', False
         s['cash'] -= 3
@@ -1053,6 +1332,20 @@ class Ledger(entity_component.ContextComponent):
           False,
       )
     if verb == 'threaten':
+      if target == 'iona' and location == 'warehouse' and s['iona_confessed']:
+        s['iona_testimony'] = 'coerced'
+        s['evidence'].pop('affidavit', None)
+        s['heat'] = min(5, s['heat'] + 2)
+        s['trust']['ada'] -= 2
+        return (
+            (
+                'Iona writes what you dictate, then marks the margin UNDER'
+                ' THREAT. Vera will not treat this as an affidavit. Ada'
+                ' receives the marked copy from her sister. You still have the'
+                ' original ledger and public-record routes.'
+            ),
+            True,
+        )
       if target not in c.CONTACTS or c.CONTACTS[target][1] != location:
         return 'You cannot threaten someone who is not here.', False
       s['heat'] = min(5, s['heat'] + 2)
@@ -1075,6 +1368,26 @@ class Ledger(entity_component.ContextComponent):
         True,
     )
 
+  def resident_moves(self, name):
+    """Only locally meaningful work; completed tasks need not be repeated."""
+    with self.lock:
+      s = self.state
+      available = {
+          'Nessa Rook': {
+              'organise': s['petition'] < 3,
+              'shelter': s['shelter_beds'] < 8,
+          },
+          'Silas Marr': {
+              'petition': s['union_support'] < 3,
+              'guard': s['union_support'] > 0 and s['security'] > 0,
+          },
+          'Edwin Holt': {
+              'audit': s['security'] < 3,
+              'offer': not s['bond_offer'],
+          },
+      }
+      return [move for move in c.NPCS[name]['moves'] if available[name][move]]
+
   def npc_resolve(self, name, move, line):
     with self.lock:
       s = self.state
@@ -1082,6 +1395,14 @@ class Ledger(entity_component.ContextComponent):
       if s['npc_turns'][name] >= s['turn']:
         return 'No new opportunity.'
       s['npc_turns'][name] = s['turn']
+      if move not in self.resident_moves(name):
+        return self._record(
+            name,
+            {'move': move},
+            'That work no longer changes local conditions; no duplicate'
+            ' effect.',
+            before,
+        )
       s['agendas'][name] += 1
       if name == 'Nessa Rook':
         if move == 'shelter':
@@ -1126,9 +1447,9 @@ class Ledger(entity_component.ContextComponent):
         s['bond_offer'] = True
         s['known_leads'] = list(dict.fromkeys(s['known_leads'] + ['carbon']))
         result = (
-            'Holt publicly offers relocation talks to anyone with one'
-            ' documented source. His carbon is still private; a meeting is'
-            ' required.'
+            'Holt invites document holders to relocation talks. An invitation'
+            ' is not a signed bond: bring corroboration or pledge a secured'
+            ' duplicate. His carbon remains private.'
         )
       # Public announcements are explicitly transmitted, not NPC omniscience.
       if not s['news'] or s['news'][-1] != result:
@@ -1139,42 +1460,183 @@ class Ledger(entity_component.ContextComponent):
       return self._record(name, {'move': move, 'line': line}, result, before)
 
 
+def intent_options(ledger):
+  """Grounded scene affordances shared with the human suggestions, not outcomes."""
+  s = ledger.public()
+  location = s['location']
+  commands = [
+      command
+      for command in ledger.available()
+      if command not in ('confirm', 'cancel')
+  ] + ['refuse case', 'wait']
+  local_contacts = [
+      key
+      for key, value in c.CONTACTS.items()
+      if value[1] == location and (key != 'iona' or 'ledger' in s['evidence'])
+  ]
+  commands += [f'threaten {key}' for key in local_contacts]
+  if location in ('cafe', 'clinic'):
+    commands += ['protect iona']
+  if location == 'cafe':
+    commands += ['promise ada', 'promise nessa', 'apologize ada']
+  if location == 'clinic':
+    commands += ['help pell']
+  if location == 'narrows':
+    commands += ['help families']
+  if location in ('office', 'press'):
+    commands += [f'copy {key}' for key in s['evidence']]
+  if location == 'mutual':
+    commands += [
+        'barter holt',
+        'settle families',
+        'settle self',
+        'repay mutual',
+    ]
+  if location == 'docks':
+    commands += ['barter silas']
+  for key, status in s['jobs'].items():
+    if c.JOBS[key]['place'] == location and status == 'decision':
+      commands += [f'refuse {key}']
+      methods = (
+          ('sell', 'warn')
+          if key == 'photograph'
+          else ('pay', 'bargain', 'stealth', 'force')
+      )
+      commands += [f'job {key} {method}' for method in methods]
+  for key in s['known_leads']:
+    if (
+        key in c.EVIDENCE
+        and c.EVIDENCE[key]['place'] == location
+        and key not in s['evidence']
+    ):
+      methods = {
+          'permit': (),
+          'testimony': (),
+          'ledger': ('stealth', 'force'),
+          'manifest': ('pay', 'stealth', 'force'),
+          'carbon': ('bargain', 'stealth', 'force'),
+      }
+      commands += [
+          f'investigate {key} {method}' for method in methods.get(key, ())
+      ]
+  meanings = {
+      'go': 'travel to',
+      'talk': 'ask questions of or listen to',
+      'look': 'inspect surroundings without committing time',
+      'investigate': 'obtain or examine a known evidence source',
+      'job': 'perform the commissioned work',
+      'rest': 'rest and recover',
+      'promise': 'make a personal commitment to',
+      'protect': 'arrange a safe bed for',
+      'publish': 'give the case to the press NOW for publication',
+      'settle': 'negotiate or accept a settlement benefiting',
+      'refuse': 'decline or return the commission',
+      'wait': 'let fictional time pass',
+      'help': 'do relief or clinic work for',
+      'threaten': 'intimidate or coerce',
+      'apologize': 'ask forgiveness from',
+      'deliver': 'physically deliver the cold medicine',
+      'copy': 'photograph or duplicate owned document pages for safekeeping',
+      'barter': 'offer collateral or a guarantee in exchange to',
+      'repay': 'pay back the confidentiality debt to',
+      'restitution': (
+          'pay Iona’s twelve-dollar compensation to displaced families'
+      ),
+      'testify': 'ask Iona to give a voluntary signed statement',
+      'tell': 'privately inform Ada of Iona’s confession',
+  }
+  options = {}
+  for command in dict.fromkeys(commands):
+    words = command.split()
+    verb = words[0]
+    target = words[1] if len(words) > 1 else ''
+    method = words[2] if len(words) > 2 else 'careful'
+    subject = (
+        c.PLACES[target][0]
+        + (' (Rowan’s own office)' if target == 'office' else '')
+        if verb == 'go' and target in c.PLACES
+        else c.CONTACTS[target][0]
+        if target in c.CONTACTS
+        else target
+    )
+    label = f'{command} — {meanings[verb]} {subject}'
+    if len(words) > 2:
+      label += {
+          'pay': '; pay $4 for evidence or $5 for tools',
+          'stealth': '; covert entry risks heat',
+          'force': '; force risks heat and injury',
+          'bargain': '; negotiate an exchange',
+          'sell': '; sell and circulate the photograph',
+          'warn': '; warn the family, lower fee',
+      }[method]
+    options[label] = {'verb': verb, 'target': target, 'method': method}
+  options[
+      'unclear — unsupported, contradictory, or several distinct actions; ask'
+      ' the player to clarify'
+  ] = {'verb': 'unclear'}
+  return options
+
+
 def parse_intent(text, model, ledger):
-  """Exact shorthand is optional; other language uses a scoped LLM proposal."""
+  """Match expressive language to a grounded affordance using standard choice."""
   words = text.lower().strip().split()
-  if words and words[0] in VERBS and len(words) <= 3:
+  targets = (
+      set(c.PLACES)
+      | set(c.CONTACTS)
+      | set(c.EVIDENCE)
+      | set(c.JOBS)
+      | {
+          'affidavit',
+          'families',
+          'self',
+          'case',
+          'source',
+          'witness',
+          'redacted',
+          'named',
+      }
+  )
+  exact = bool(words) and (
+      len(words) == 1
+      and words[0] in ('look', 'rest', 'wait', 'confirm', 'cancel')
+      or len(words) in (2, 3)
+      and words[0] in VERBS
+      and words[0] not in ('look', 'rest', 'wait', 'confirm', 'cancel')
+      and words[1] in targets
+      and (len(words) == 2 or words[2] in METHODS)
+  )
+  if exact:
     return {
         'verb': words[0],
         'target': words[1] if len(words) > 1 else '',
         'method': words[2] if len(words) > 2 else 'careful',
     }
+  options = intent_options(ledger)
   prompt = (
-      'Translate this investigator attempt to ONE JSON object with verb,'
-      ' target, method. '
-      'Never invent success or evidence. If unsupported use verb unclear. '
-      f'Verbs: {VERBS}. Methods: {METHODS}. Locations: {list(c.PLACES)}. '
-      'Contacts:'
-      f" {[k for k in c.CONTACTS if k != 'iona' or 'ledger' in ledger.public()['evidence']]}."
-      f" Known clue targets: {ledger.public()['known_leads']}. Jobs:"
-      f' {list(c.JOBS)}. '
-      'publish targets redacted/named; settle targets families/self. Copy an'
-      ' owned clue at office/press; barter holt exchanges a secured duplicate'
-      ' for bond access; deliver medicine in narrows. Preserve intent: if a'
-      ' proposal is not supported by these rules return verb unclear, never'
-      ' substitute an unrelated goal. '
-      'Current player-visible situation: '
+      'The investigator is Rowan Vale. Their own office is Vale Investigations'
+      ' [office]; Municipal Records [records] is a different building.'
+      ' Interpret ONE investigator intention, not its success. Choose the scene'
+      ' affordance whose meaning actually matches the attempt. Respect'
+      ' negation: do not publish, sell, threaten or pay if the player refuses'
+      ' that action. Asking about something is conversation, not permission to'
+      ' do it. If no option preserves the intent, or distinct actions conflict,'
+      ' choose unclear. Never choose a merely related substitute. Copying'
+      ' papers and locking that copy away is one coherent act, not two'
+      ' unrelated actions.\nCurrent player-visible scene:\n'
       + ledger.view()
-      + '\nAttempt: '
+      + '\nPlayer attempt: '
       + text
   )
-  response = model.sample_text(prompt, max_tokens=160, temperature=0)
-  match = re.search(r'\{[^{}]*\}', response)
-  try:
-    intent = json.loads(match.group() if match else '{}')
-  except ValueError:
-    return {}
-  if not isinstance(intent, dict) or not all(
-      isinstance(intent.get(k, ''), str) for k in ('verb', 'target', 'method')
-  ):
-    return {}
-  return intent
+  # Reuse the standard arbitrary-response choice contract with short commands,
+  # avoiding an extra letter mapping task or a long response schema.
+  labels = {label.split(' — ', 1)[0]: label for label in options}
+  _, command, _ = model.sample_choice(
+      prompt + '\nAvailable intentions:\n' + '\n'.join(options),
+      responses=tuple(labels),
+  )
+  choice = labels[command]
+  return {
+      **options[choice],
+      '_model_response': choice,
+      '_needs_confirmation': True,
+  }

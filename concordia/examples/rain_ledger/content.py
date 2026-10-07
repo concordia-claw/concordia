@@ -14,6 +14,32 @@
 
 """Original Rain Ledger scenario content; no licensed setting or rules."""
 
+from typing import TypedDict
+
+
+class EvidenceSpec(TypedDict):
+  place: str
+  source: str
+  text: str
+  credibility: int
+  kind: str
+
+
+class JobSpec(TypedDict):
+  place: str
+  pay: int
+  description: str
+
+
+class ResidentSpec(TypedDict):
+  home: str
+  goal: str
+  knowledge: str
+  moves: list[str]
+  affordances: str
+  voice: str
+
+
 PLAYER = 'Rowan Vale'
 GM = 'Port Mercy'
 OPENING = """The envelope contains six dollars and a photograph of a woman repairing a clock.
@@ -23,7 +49,7 @@ OPENING = """The envelope contains six dollars and a photograph of a woman repai
 Outside your office, a tram conductor argues with a boy over a fare neither can afford. On your desk are two other offers: recover a dockworker's pawned tools, or photograph a councillor's midnight visitor. You have $18, a camera, a lock pick and an office paid through tomorrow. You have accepted nothing yet.
 
 Ada will wait at the Lantern café. You can follow her, take other work, or walk away. Nobody has bought your answer."""
-PLACES = {
+PLACES: dict[str, tuple[str, str, list[str]]] = {
     'office': (
         'Vale Investigations',
         (
@@ -97,7 +123,7 @@ PLACES = {
         ['cafe', 'narrows'],
     ),
 }
-CONTACTS = {
+CONTACTS: dict[str, tuple[str, str, str]] = {
     'ada': (
         'Ada Saye',
         'cafe',
@@ -119,7 +145,7 @@ CONTACTS = {
         'docks',
         (
             'Union dispatcher. Short sentences, dry humour. Wants wages'
-            ' restored; has concealed dangerous work to keep men employed.'
+            ' restored and the loading crews kept together.'
         ),
     ),
     'vera': (
@@ -134,9 +160,8 @@ CONTACTS = {
         'Edwin Holt',
         'mutual',
         (
-            'Mutual assessor. Polite complete sentences. Wants a solvent'
-            ' company and a pension for his sick husband; can sacrifice'
-            ' directors if his signature is protected.'
+            'Mutual assessor. Polite complete sentences. Makes appointments'
+            ' in pencil and keeps the carbon copies within reach.'
         ),
     ),
     'pell': (
@@ -151,12 +176,12 @@ CONTACTS = {
         'Iona Saye',
         'warehouse',
         (
-            'Bookkeeper. Speaks in corrections. Hid fraudulent valuations but'
-            ' also signed one herself to fund her mother’s care.'
+            'Bookkeeper. Speaks in corrections. Repairs clocks while she works.'
+            ' You have yet to hear her own account.'
         ),
     ),
 }
-EVIDENCE = {
+EVIDENCE: dict[str, EvidenceSpec] = {
     'permit': {
         'place': 'records',
         'source': 'Municipal duplicate register, folio 81',
@@ -208,7 +233,7 @@ EVIDENCE = {
         'kind': 'document',
     },
 }
-JOBS = {
+JOBS: dict[str, JobSpec] = {
     'tools': {
         'place': 'docks',
         'pay': 12,
@@ -235,7 +260,7 @@ JOBS = {
         ),
     },
 }
-NPCS = {
+NPCS: dict[str, ResidentSpec] = {
     'Nessa Rook': {
         'home': 'cafe',
         'goal': (
@@ -247,6 +272,12 @@ NPCS = {
             ' know nothing about insurance accounts.'
         ),
         'moves': ['organise', 'shelter'],
+        'affordances': (
+            'organise adds one verified block representative to the tenants'
+            ' petition, up to three; shelter opens two beds above your cafe, up'
+            ' to eight. Families need both an immediate place to sleep and a'
+            ' collective claim. Wait if your work is already sufficient.'
+        ),
         'voice': 'Practical, warm, refuses grand speeches.',
     },
     'Silas Marr': {
@@ -257,6 +288,12 @@ NPCS = {
             ' You concealed one unsafe shift.'
         ),
         'moves': ['petition', 'guard'],
+        'affordances': (
+            'petition publicly offers certified tally access and builds union'
+            ' support up to three; guard spends one support to move guard'
+            ' attention away from Mutual. You know the tally dates matter;'
+            ' guard is useful when witnesses need space.'
+        ),
         'voice': 'Dry humour, brief sentences, concrete prices.',
     },
     'Edwin Holt': {
@@ -270,6 +307,12 @@ NPCS = {
             ' missing bookkeeper may expose your guarantee.'
         ),
         'moves': ['audit', 'offer'],
+        'affordances': (
+            'audit tightens office security up to three and makes covert'
+            ' copying risky from level two; offer publicly opens relocation'
+            ' negotiations to holders of a documented source. You can preserve'
+            ' your position while choosing whether to obstruct or negotiate.'
+        ),
         'voice': 'Courteous, cautious, speaks in complete sentences.',
     },
 }
