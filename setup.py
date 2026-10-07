@@ -66,6 +66,7 @@ setuptools.setup(
     packages=setuptools.find_packages(include=['concordia', 'concordia.*']),
     package_data={
         'concordia.utils': ['log_viewer.html'],
+        'concordia.examples.rain_ledger': ['static/*', 'README.md'],
         'concordia.examples.astral_canticle': ['static/*', 'README.md', 'requirements*.txt'],
     },
     python_requires='>=3.12',
