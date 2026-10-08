@@ -495,6 +495,37 @@ class ResidentPolicyTest(unittest.TestCase):
         resumed.snapshot()['jobs']['medicine']['description'],
     )
 
+  def test_union_obligation_can_be_fulfilled_after_earlier_delivery(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'clinic'
+    act(ledger, 'job medicine')
+    act(ledger, 'go narrows')
+    act(ledger, 'deliver medicine')
+    ledger.state['location'] = 'docks'
+    act(ledger, 'job tools')
+    act(ledger, 'job tools bargain')
+    ledger.state['location'] = 'clinic'
+    self.assertIn('job medicine', ledger.available())
+    self.assertTrue(
+        game.RainSession(ledger).snapshot()['jobs']['medicine']['followup']
+    )
+    self.assertIn('another consignment', act(ledger, 'job medicine'))
+    before = ledger.public()
+    act(ledger, 'job medicine')
+    self.assertEqual(ledger.public()['inventory'].count('cold medicine'), 1)
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    act(ledger, 'go narrows')
+    act(ledger, 'deliver medicine')
+    self.assertNotIn(
+        'union guarantee: carry medicine for the crew', ledger.public()['debts']
+    )
+    ledger.state['location'] = 'clinic'
+    self.assertNotIn('job medicine', ledger.available())
+    self.assertFalse(
+        game.RainSession(ledger).snapshot()['jobs']['medicine']['followup']
+    )
+    self.assertIn('settled', act(ledger, 'job medicine'))
+
   def test_medicine_is_not_paid_until_physical_delivery(self):
     ledger = rules.Ledger()
     for command in ('go cafe', 'go clinic', 'job medicine'):

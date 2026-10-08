@@ -231,7 +231,13 @@ class Ledger(entity_component.ContextComponent):
         f'job {key}'
         for key, value in c.JOBS.items()
         if value['place'] == s['location']
-        and not s['jobs'].get(key, '').startswith('complete:')
+        and (
+            not s['jobs'].get(key, '').startswith('complete:')
+            or (
+                key == 'medicine'
+                and 'union guarantee: carry medicine for the crew' in s['debts']
+            )
+        )
     ]
     if 'cold medicine' in s['inventory'] and s['location'] == 'narrows':
       choices.append('deliver medicine')
@@ -1149,7 +1155,11 @@ class Ledger(entity_component.ContextComponent):
             False,
         )
       status = s['jobs'].get(target)
-      if status and status.startswith('complete:'):
+      followup_delivery = (
+          target == 'medicine'
+          and 'union guarantee: carry medicine for the crew' in s['debts']
+      )
+      if status and status.startswith('complete:') and not followup_delivery:
         return (
             (
                 'That commission is settled. Pell has ongoing delivery work;'
@@ -1178,7 +1188,13 @@ class Ledger(entity_component.ContextComponent):
         s['inventory'].append('cold medicine')
         return (
             (
-                'Pell hands you a cold case, destination the Narrows shelter.'
+                (
+                    'Pell issues another consignment for the crew; your earlier'
+                    ' commission remains recorded. '
+                    if status and status.startswith('complete:')
+                    else ''
+                )
+                + 'Pell hands you a cold case, destination the Narrows shelter.'
                 ' “Nine on delivery. Keep the seal intact.” You can go'
                 ' directly, or settle another errand first; reading time does'
                 ' not spoil it.'

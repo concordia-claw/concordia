@@ -254,3 +254,8 @@ terms; `settle families accept` signs. The review exposes the alternative forgon
 and any organising fee. Signing requires independently sourced credible proof
 or the established secured-copy pledge; duplicate witness accounts are not
 corroboration. No agreement transfers or destroys your evidence.
+
+Returning to an inspected job rereads the decision without choosing it. The work
+board remembers learned complications after reconnect. If a tools guarantee is
+accepted after an earlier medicine job, Pell offers a new consignment until that
+guarantee is discharged; earlier receipts remain in the journal.

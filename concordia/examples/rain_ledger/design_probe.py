@@ -47,6 +47,27 @@ _FOLLOWUP = _DISCLOSURE_OPENING + [
 ]
 
 PATHS = {
+    'medicine_before_tools': [
+        'refuse case',
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go warehouse',
+        'go docks',
+        'job tools',
+        'job tools bargain',
+        'go office',
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go clinic',
+        'job medicine',
+    ],
     'tenant_organiser': [
         'refuse case',
         'go cafe',

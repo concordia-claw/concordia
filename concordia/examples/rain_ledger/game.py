@@ -92,6 +92,10 @@ class RainSession(human_io.HumanSession):
       result['status'] = 'Paused safely. Read, inspect or resume when ready.'
       result['revision'] = str(result['revision']) + ':paused'
     player_state = self.ledger.public()
+    followup_medicine = (
+        'union guarantee: carry medicine for the crew' in player_state['debts']
+        and player_state['jobs'].get('medicine', '').startswith('complete:')
+    )
     result.update(
         casebook=player_state,
         suggestions=self.ledger.available(),
@@ -107,8 +111,13 @@ class RainSession(human_io.HumanSession):
         jobs={
             key: {
                 'place': value['place'],
+                'followup': key == 'medicine' and followup_medicine,
                 'description': (
-                    c.JOB_PROGRESS[key].get(
+                    'The union guarantee is still owed. Pell can issue a new'
+                    ' sealed consignment for the crew; the earlier commission'
+                    ' stays recorded. Ask at the clinic with job medicine.'
+                    if key == 'medicine' and followup_medicine
+                    else c.JOB_PROGRESS[key].get(
                         player_state['jobs'].get(key), PUBLIC_JOBS[key]
                     )
                 ),
