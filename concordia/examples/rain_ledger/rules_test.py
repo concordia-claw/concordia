@@ -447,6 +447,54 @@ class ResidentPolicyTest(unittest.TestCase):
     self.assertTrue(ledger.get_state()['witnessed']['Edwin Holt'])
     self.assertNotIn('witnessed', ledger.public())
 
+  def test_reopening_job_does_not_choose_debt_or_disclosure(self):
+    for job, place, invalid in (
+        ('tools', 'docks', 'sell'),
+        ('photograph', 'mutual', 'bargain'),
+    ):
+      ledger = rules.Ledger()
+      ledger.state['location'] = place
+      act(ledger, 'job ' + job)
+      before = ledger.public()
+      for command in ('job ' + job, f'job {job} {invalid}'):
+        act(ledger, command)
+        for key in ('turn', 'cash', 'debts', 'jobs', 'photo_exposed', 'trust'):
+          self.assertEqual(ledger.public()[key], before[key])
+      self.assertEqual(ledger.public()['jobs'][job], 'decision')
+
+  def test_returning_job_board_remembers_only_discovered_complications(self):
+    ledger = rules.Ledger()
+    session = game.RainSession(ledger)
+    self.assertNotIn(
+        'patient', session.snapshot()['jobs']['photograph']['description']
+    )
+    ledger.state['location'] = 'mutual'
+    act(ledger, 'job photograph')
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    resumed = game.RainSession(restored, restored=True)
+    self.assertIn(
+        'patient', resumed.snapshot()['jobs']['photograph']['description']
+    )
+    self.assertIn(
+        'Nothing has been circulated',
+        resumed.snapshot()['jobs']['photograph']['description'],
+    )
+    act(restored, 'refuse photograph')
+    self.assertNotIn(
+        'Nothing has been circulated',
+        resumed.snapshot()['jobs']['photograph']['description'],
+    )
+    restored.state['location'] = 'clinic'
+    act(restored, 'job medicine')
+    self.assertIn(
+        'Narrows', resumed.snapshot()['jobs']['medicine']['description']
+    )
+    self.assertIn(
+        'sealed cold case is with you',
+        resumed.snapshot()['jobs']['medicine']['description'],
+    )
+
   def test_medicine_is_not_paid_until_physical_delivery(self):
     ledger = rules.Ledger()
     for command in ('go cafe', 'go clinic', 'job medicine'):

@@ -1158,6 +1158,14 @@ class Ledger(entity_component.ContextComponent):
             False,
         )
       if target == 'medicine':
+        if method != 'careful':
+          return (
+              (
+                  'Ask Pell for the sealed delivery with job medicine, or'
+                  ' decline it. No alternate delivery terms were agreed.'
+              ),
+              False,
+          )
         if status == 'carrying':
           return (
               (
@@ -1199,6 +1207,8 @@ class Ledger(entity_component.ContextComponent):
             ),
             True,
         )
+      if method not in c.JOB_METHODS[target]:
+        return c.JOB_PROGRESS[target]['decision'], False
       job = c.JOBS[target]
       reward = job['pay']
       if target == 'tools':
@@ -2023,11 +2033,7 @@ def intent_options(ledger):
   for key, status in s['jobs'].items():
     if c.JOBS[key]['place'] == location and status == 'decision':
       commands += [f'refuse {key}']
-      methods = (
-          ('sell', 'warn')
-          if key == 'photograph'
-          else ('pay', 'bargain', 'stealth', 'force')
-      )
+      methods = c.JOB_METHODS[key]
       commands += [f'job {key} {method}' for method in methods]
   for key in s['known_leads']:
     if (

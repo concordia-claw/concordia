@@ -91,8 +91,9 @@ class RainSession(human_io.HumanSession):
     if self.controller is not None and self.controller.at_pause_boundary:
       result['status'] = 'Paused safely. Read, inspect or resume when ready.'
       result['revision'] = str(result['revision']) + ':paused'
+    player_state = self.ledger.public()
     result.update(
-        casebook=self.ledger.public(),
+        casebook=player_state,
         suggestions=self.ledger.available(),
         map={
             key: {'name': val[0], 'exits': val[2]}
@@ -104,7 +105,14 @@ class RainSession(human_io.HumanSession):
             if key != 'iona' or 'ledger' in self.ledger.public()['evidence']
         },
         jobs={
-            key: {'place': value['place'], 'description': PUBLIC_JOBS[key]}
+            key: {
+                'place': value['place'],
+                'description': (
+                    c.JOB_PROGRESS[key].get(
+                        player_state['jobs'].get(key), PUBLIC_JOBS[key]
+                    )
+                ),
+            }
             for key, value in c.JOBS.items()
         },
         pause_after=self.pause_after,

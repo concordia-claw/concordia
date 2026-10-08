@@ -271,6 +271,36 @@ JOBS: dict[str, JobSpec] = {
         ),
     },
 }
+# These become visible only after the investigator has inspected the job.
+JOB_METHODS = {
+    'tools': ('pay', 'bargain', 'stealth', 'force'),
+    'photograph': ('sell', 'warn'),
+    'medicine': ('careful',),
+}
+JOB_PROGRESS = {
+    'tools': {
+        'decision': (
+            'The tools are in the pawn cage. At the docks, pay $5, pledge a'
+            ' later medicine delivery, or risk theft/force. You can also refuse'
+            ' the job.'
+        )
+    },
+    'photograph': {
+        'decision': (
+            'The visitor is a patient’s relative seeking medicine. At Mutual,'
+            ' sell the photograph for $20, warn the family for $4, or refuse'
+            ' without a fee. Nothing has been circulated yet.'
+        )
+    },
+    'medicine': {
+        'carrying': (
+            'The sealed cold case is with you. Deliver medicine in the Narrows'
+            ' for $9, or return it to Pell at the clinic to decline. Reading or'
+            ' disconnecting does not spoil it.'
+        )
+    },
+}
+
 NPCS: dict[str, ResidentSpec] = {
     'Nessa Rook': {
         'home': 'cafe',
