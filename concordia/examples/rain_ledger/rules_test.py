@@ -35,6 +35,96 @@ def act(ledger, command):
 
 class ConsequencesTest(unittest.TestCase):
 
+  def test_betrayed_witness_and_coerced_authentication_do_not_bypass_access(
+      self,
+  ):
+    ledger = rules.Ledger()
+    ledger.state.update(location='cafe', known_leads=['testimony'])
+    ledger.state['trust']['ada'] = -1
+    before = ledger.public()
+    self.assertIn('unrepaired', act(ledger, 'investigate testimony'))
+    self.assertNotIn('testimony', ledger.public()['evidence'])
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    ledger.state.update(location='warehouse', known_leads=['ledger'])
+    act(ledger, 'investigate ledger force')
+    act(ledger, 'talk iona')
+    act(ledger, 'threaten iona')
+    ledger.state['protected'] = True
+    before = ledger.public()
+    act(ledger, 'authenticate ledger')
+    self.assertFalse(ledger.public()['evidence']['ledger']['authenticated'])
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+
+  def test_unsupported_evidence_method_cannot_bypass_access(self):
+    ledger = rules.Ledger()
+    for action in ('go docks', 'talk silas'):
+      act(ledger, action)
+    before = ledger.public()
+    response = act(ledger, 'investigate manifest bargain')
+    self.assertIn('does not grant access', response)
+    self.assertEqual(ledger.public()['cash'], before['cash'])
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertNotIn('manifest', ledger.public()['evidence'])
+    act(ledger, 'investigate manifest pay')
+    self.assertEqual(ledger.public()['evidence']['manifest']['credibility'], 2)
+
+  def test_covert_carbon_needs_proof_then_can_be_authenticated_without_rewriting_history(
+      self,
+  ):
+    ledger = rules.Ledger()
+    for action in (
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon stealth',
+        'go press',
+    ):
+      act(ledger, action)
+    self.assertEqual(ledger.public()['evidence']['carbon']['credibility'], 1)
+    self.assertIn('Two independent sources', act(ledger, 'publish records'))
+    self.assertFalse(ledger.public()['published'])
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    act(restored, 'go mutual')
+    self.assertIn('authenticate carbon', restored.available())
+    heat = restored.public()['heat']
+    act(restored, 'authenticate carbon bargain')
+    evidence = restored.public()['evidence']['carbon']
+    self.assertEqual(evidence['credibility'], 2)
+    self.assertTrue(evidence['authenticated'])
+    self.assertIn('covertly', evidence['acquisition'])
+    self.assertEqual(restored.public()['heat'], heat)
+    before = restored.public()
+    act(restored, 'authenticate carbon bargain')
+    self.assertEqual(restored.public()['turn'], before['turn'])
+    act(restored, 'go press')
+    act(restored, 'publish records')
+    self.assertTrue(restored.public()['stayed'])
+
+  def test_covert_tally_certification_cost_and_collateral_are_real(self):
+    ledger = rules.Ledger()
+    for action in ('go docks', 'talk silas', 'investigate manifest stealth'):
+      act(ledger, action)
+    before = ledger.public()
+    act(ledger, 'authenticate manifest')
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    act(ledger, 'go office')
+    act(ledger, 'copy manifest')
+    act(ledger, 'go records')
+    act(ledger, 'go mutual')
+    self.assertIn('credible collateral', act(ledger, 'barter holt'))
+    self.assertNotIn(
+        'secured copy pledged for Mutual relocation audit',
+        ledger.public()['promises'],
+    )
+    ledger.state['location'] = 'docks'
+    before = ledger.public()
+    act(ledger, 'authenticate manifest pay')
+    self.assertEqual(ledger.public()['cash'], before['cash'] - 4)
+    self.assertEqual(ledger.public()['evidence']['manifest']['credibility'], 2)
+    self.assertEqual(ledger.public()['copies'], ['manifest'])
+
   def test_betrayal_is_not_cancelled_by_goodwill_or_prior_private_conversation(
       self,
   ):

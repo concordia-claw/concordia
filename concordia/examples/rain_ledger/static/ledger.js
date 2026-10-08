@@ -11,7 +11,7 @@
       document.body.classList.toggle('has-played', s.history.length > 0);
       node('resources').textContent = `${state.map[s.location].name} · $${s.cash} · Injury ${s.injury}/3 · Heat ${s.heat}/5`;
       paragraphs('notices', [`Known leads: ${s.known_leads.join(', ') || 'none'}.`, ...s.news.slice(-4)]);
-      paragraphs('casebook', [s.neighbourhood, ...Object.values(s.evidence).map(e=>`${e.text} — ${e.source} (${e.credibility}/3)`) ]);
+      paragraphs('casebook', [s.neighbourhood, ...Object.values(s.evidence).map(e=>`${e.text} — ${e.source} (${e.credibility}/3) · ${e.acquisition || 'Earlier recorded provenance'}${e.authenticated === false ? ' · Needs authentication or corroboration' : ''}`) ]);
       paragraphs('obligations', [...s.promises, ...s.debts, ...(!s.promises.length&&!s.debts.length?['No promises or debts.']:[])]);
       paragraphs('city', Object.entries(state.map).map(([key,p])=>`${p.name} [${key}] → ${p.exits.join(', ')}`).concat(Object.values(state.contacts).map(p=>`${p[0]} · ${p[1]} · ${p[2]}`)));
       paragraphs('jobs', Object.entries(state.jobs).map(([key,j])=>`${s.jobs[key]?.startsWith('complete:')?'SETTLED':s.jobs[key]?'IN PROGRESS':'AVAILABLE'} · ${key} at ${j.place}: ${j.description}`));

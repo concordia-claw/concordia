@@ -32,6 +32,7 @@ VERBS = (
     'look',
     'talk',
     'investigate',
+    'authenticate',
     'job',
     'rest',
     'promise',
@@ -171,7 +172,8 @@ class Ledger(entity_component.ContextComponent):
     clues = (
         '\n'.join(
             f"• {key}: {e['text']} [{e['source']}; credibility"
-            f" {e['credibility']}/3]"
+            f" {e['credibility']}/3;"
+            f" {e.get('acquisition', 'earlier recorded provenance')}]"
             for key, e in s['evidence'].items()
         )
         or 'No evidence collected.'
@@ -208,6 +210,12 @@ class Ledger(entity_component.ContextComponent):
         if value['place'] == s['location']
         and key not in s['evidence']
         and key in s['known_leads']
+    ]
+    choices += [
+        f'authenticate {key}'
+        for key, value in s['evidence'].items()
+        if value.get('authenticated') is False
+        and value['place'] == s['location']
     ]
     choices += [
         f'job {key}'
@@ -358,6 +366,7 @@ class Ledger(entity_component.ContextComponent):
               'settle',
               'help',
               'deliver',
+              'authenticate',
           )
           and method != 'stealth',
       )
@@ -842,6 +851,105 @@ class Ledger(entity_component.ContextComponent):
           ),
           True,
       )
+    if verb == 'authenticate':
+      evidence = s['evidence'].get(target)
+      if not evidence or evidence.get('authenticated') is not False:
+        return (
+            (
+                'No unverified copy of that source needs authentication.'
+                ' Nothing is charged.'
+            ),
+            False,
+        )
+      if location != evidence['place']:
+        return (
+            'Return to the source at '
+            + c.PLACES[evidence['place']][0]
+            + ' for a witnessed comparison; or corroborate it with independent'
+            ' records.',
+            False,
+        )
+      if target == 'manifest':
+        if method not in ('careful', 'pay'):
+          return (
+              (
+                  'Silas can certify the tally after the tools job, or for $4:'
+                  ' authenticate manifest pay. Coercion is not certification.'
+              ),
+              False,
+          )
+        if s['trust']['silas'] < 1:
+          if method != 'pay':
+            return (
+                (
+                    'Silas offers a witnessed tally comparison for $4, or free'
+                    ' once the tools are recovered. Your copy stays yours.'
+                ),
+                False,
+            )
+          if s['cash'] < 4:
+            return (
+                (
+                    'Certification costs $4. Recover the tools or bring another'
+                    ' independent record instead.'
+                ),
+                False,
+            )
+          s['cash'] -= 4
+      elif target == 'carbon':
+        if method not in ('careful', 'bargain'):
+          return (
+              (
+                  'Holt will verify his signature in an exchange, not under'
+                  ' threat. Bring an independent documented source.'
+              ),
+              False,
+          )
+        if not any(
+            key != target
+            and e.get('authenticated', True)
+            and e['credibility'] >= 2
+            for key, e in s['evidence'].items()
+        ):
+          return (
+              (
+                  'Holt will not authenticate a copy merely because you have'
+                  ' copied it again. Bring another credible record; the public'
+                  ' permit is available.'
+              ),
+              False,
+          )
+      elif target == 'ledger':
+        if (
+            method != 'careful'
+            or not s['protected']
+            or not s['iona_confessed']
+            or s['iona_testimony'] == 'coerced'
+        ):
+          return (
+              (
+                  'Iona will compare the pages after you hear her account and'
+                  ' arrange a safe place, without coercion. Public records'
+                  ' remain an alternative.'
+              ),
+              False,
+          )
+      else:
+        return 'This source has no separate authentication route.', False
+      evidence['authenticated'] = True
+      evidence['credibility'] = c.EVIDENCE[target]['credibility']
+      evidence['acquisition'] = (
+          evidence.get('acquisition', 'earlier acquisition not recorded')
+          + '; later compared with the source in a witnessed exchange'
+      )
+      return (
+          (
+              'The pages match. Authentication restores the recorded'
+              ' credibility, not a new independent source; heat and the'
+              ' original acquisition remain in the casebook.'
+          ),
+          True,
+      )
     if verb == 'investigate':
       if target not in s['known_leads']:
         return (
@@ -859,11 +967,28 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      if method not in c.EVIDENCE_METHODS[target]:
+        return (
+            'That method does not grant access to this source. Available'
+            ' approaches: '
+            + ', '.join(c.EVIDENCE_METHODS[target])
+            + '. Ask the holder about terms; no money or time spent.',
+            False,
+        )
       if target in s['evidence']:
         return (
             (
                 'You already have that evidence; the casebook preserves its'
                 ' provenance.'
+            ),
+            False,
+        )
+      if target == 'testimony' and s['trust']['ada'] < 0:
+        return (
+            (
+                'Ada will not sign an account while the breach between you is'
+                ' unrepaired. Bring visible relief and an apology, or use'
+                ' independent records.'
             ),
             False,
         )
@@ -930,13 +1055,31 @@ class Ledger(entity_component.ContextComponent):
         if method == 'force':
           s['injury'] = min(3, s['injury'] + 1)
       s['evidence'][target] = copy.deepcopy(c.EVIDENCE[target])
+      evidence = s['evidence'][target]
+      evidence['authenticated'] = method not in ('stealth', 'force')
+      evidence['acquisition'] = {
+          'careful': 'supplied or inspected with the source present',
+          'pay': 'paid, witnessed access',
+          'bargain': 'witnessed exchange with the holder',
+          'stealth': 'covertly obtained pages; chain of custody unverified',
+          'force': 'pages taken by force; chain of custody unverified',
+      }[method]
+      if not evidence['authenticated']:
+        evidence['credibility'] = 1
       if target == 'ledger':
         s['case'] = 'Iona located'
       return (
           'You secure '
           + c.EVIDENCE[target]['source']
           + '. '
-          + c.EVIDENCE[target]['text'],
+          + c.EVIDENCE[target]['text']
+          + (
+              ' These pages are an unverified lead (credibility1), not a'
+              ' witnessed record. Authenticate them at the source or find'
+              ' independent corroboration.'
+              if not evidence['authenticated']
+              else ''
+          ),
           True,
       )
     if verb == 'job':
@@ -1106,6 +1249,19 @@ class Ledger(entity_component.ContextComponent):
       )
     if verb == 'barter':
       if target == 'holt' and location == 'mutual' and s['copies']:
+        if not any(
+            s['evidence'][key].get('authenticated', True)
+            and s['evidence'][key]['credibility'] >= 2
+            for key in s['copies']
+        ):
+          return (
+              (
+                  'Holt wants credible collateral, not another print of'
+                  ' disputed pages. Authenticate the source or secure a'
+                  ' different document; you keep the copy.'
+              ),
+              False,
+          )
         pledge = 'secured copy pledged for Mutual relocation audit'
         if pledge in s['promises']:
           return (
@@ -1714,21 +1870,27 @@ def intent_options(ledger):
         and c.EVIDENCE[key]['place'] == location
         and key not in s['evidence']
     ):
-      methods = {
-          'permit': (),
-          'testimony': (),
-          'ledger': ('stealth', 'force'),
-          'manifest': ('pay', 'stealth', 'force'),
-          'carbon': ('bargain', 'stealth', 'force'),
-      }
       commands += [
-          f'investigate {key} {method}' for method in methods.get(key, ())
+          f'investigate {key} {method}'
+          for method in c.EVIDENCE_METHODS[key]
+          if method != 'careful'
       ]
+  if (
+      location == 'docks'
+      and s['evidence'].get('manifest', {}).get('authenticated') is False
+  ):
+    commands.append('authenticate manifest pay')
+  if (
+      location == 'mutual'
+      and s['evidence'].get('carbon', {}).get('authenticated') is False
+  ):
+    commands.append('authenticate carbon bargain')
   meanings = {
       'go': 'travel to',
       'talk': 'ask questions of or listen to',
       'look': 'inspect surroundings without committing time',
       'investigate': 'obtain or examine a known evidence source',
+      'authenticate': 'obtain a witnessed comparison of an unverified source',
       'job': 'perform the commissioned work',
       'rest': 'rest and recover',
       'promise': 'make a personal commitment to',
@@ -1789,6 +1951,11 @@ def intent_options(ledger):
           'sell': '; sell and circulate the photograph',
           'warn': '; warn the family, lower fee',
       }[method]
+    if verb == 'investigate' and method in ('stealth', 'force'):
+      label += (
+          '; acquired pages have unverified custody (credibility1);'
+          ' authenticate or corroborate later'
+      )
     options[label] = {'verb': verb, 'target': target, 'method': method}
   options[
       'unclear — unsupported, contradictory, or several distinct actions; ask'

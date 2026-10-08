@@ -47,6 +47,51 @@ _FOLLOWUP = _DISCLOSURE_OPENING + [
 ]
 
 PATHS = {
+    'acquisition_authenticate': [
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon stealth',
+        'go press',
+        'talk vera',
+        'publish records',
+        'go mutual',
+        'authenticate carbon bargain',
+        'go press',
+        'talk vera',
+        'publish records',
+    ],
+    'acquisition_corroborate': [
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon stealth',
+        'go press',
+        'publish records',
+        'go docks',
+        'talk silas',
+        'investigate manifest pay',
+        'go press',
+        'publish records',
+    ],
+    'acquisition_work': [
+        'go docks',
+        'talk silas',
+        'investigate manifest bargain',
+        'investigate manifest stealth',
+        'authenticate manifest',
+        'job tools',
+        'job tools bargain',
+        'authenticate manifest',
+        'go office',
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'go press',
+        'publish records',
+    ],
     'followup_redacted': (
         _FOLLOWUP
         + [

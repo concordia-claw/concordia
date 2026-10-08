@@ -14,7 +14,7 @@
 
 """Original Rain Ledger scenario content; no licensed setting or rules."""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class EvidenceSpec(TypedDict):
@@ -23,6 +23,8 @@ class EvidenceSpec(TypedDict):
   text: str
   credibility: int
   kind: str
+  acquisition: NotRequired[str]
+  authenticated: NotRequired[bool]
 
 
 class JobSpec(TypedDict):
@@ -233,6 +235,15 @@ EVIDENCE: dict[str, EvidenceSpec] = {
         'kind': 'document',
     },
 }
+# Scenario access routes shared by suggestions and authoritative resolution.
+EVIDENCE_METHODS = {
+    'permit': ('careful',),
+    'testimony': ('careful',),
+    'ledger': ('careful', 'stealth', 'force'),
+    'manifest': ('careful', 'pay', 'stealth', 'force'),
+    'carbon': ('careful', 'bargain', 'stealth', 'force'),
+}
+
 JOBS: dict[str, JobSpec] = {
     'tools': {
         'place': 'docks',
