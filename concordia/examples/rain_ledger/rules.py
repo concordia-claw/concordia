@@ -415,12 +415,15 @@ class Ledger(entity_component.ContextComponent):
         if mode != 'records' or key in ('permit', 'manifest', 'carbon')
     }
     witness_keys = {'ledger', 'testimony', 'affidavit'}
-    independent = {
-        'iona-account' if key in witness_keys else key for key in sources
-    }
+    independent = {}
+    for key, evidence in sources.items():
+      family = 'iona-account' if key in witness_keys else key
+      independent[family] = max(
+          independent.get(family, 0), evidence['credibility']
+      )
     vulnerable = bool(set(sources) & witness_keys)
     required = 3 if mode == 'redacted' and vulnerable else 2
-    credibility = sum(e['credibility'] for e in sources.values())
+    credibility = sum(independent.values())
     new_sources = [key for key in sources if key not in self.state['published']]
     return {
         'sources': sources,
@@ -441,11 +444,14 @@ class Ledger(entity_component.ContextComponent):
         ),
         'finding': (
             'records of inflated premiums and false occupancy entries'
-            if set(sources) & {'ledger', 'affidavit'}
+            if any(
+                key in sources and sources[key]['credibility'] >= 2
+                for key in ('ledger', 'affidavit')
+            )
             else (
                 'Mutual’s signed demolition rider and the disputed condemnation'
             )
-            if 'carbon' in sources
+            if 'carbon' in sources and sources['carbon']['credibility'] >= 2
             else 'demolition planning before the safety findings'
         ),
     }
@@ -502,6 +508,10 @@ class Ledger(entity_component.ContextComponent):
             'Any publication breaches your signed clause: $35 repayment and two'
             ' legal heat, even with names withheld.'
         )
+      lines.append(
+          'Credibility counts the strongest item from each source family;'
+          ' repeated accounts do not add independent weight.'
+      )
       lines.append(
           'Reviewing is free. This review publishes or surrenders nothing. Keep'
           ' investigating, choose a dossier, or walk away.'

@@ -98,6 +98,31 @@ class ConversationPresentationTest(unittest.TestCase):
 
 class ConsequencesTest(unittest.TestCase):
 
+  def test_repeated_source_material_cannot_inflate_corroboration(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'press'
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key])
+        for key in ('testimony', 'ledger', 'carbon')
+    }
+    ledger.state['evidence']['ledger'].update(
+        credibility=1, authenticated=False
+    )
+    review = act(ledger, 'talk vera')
+    self.assertIn('credibility 3/4', review)
+    self.assertIn('strongest item', review)
+    act(ledger, 'publish named')
+    self.assertFalse(ledger.public()['published'])
+    self.assertEqual(ledger.public()['turn'], 0)
+    ledger.state['evidence']['permit'] = dict(content.EVIDENCE['permit'])
+    review = act(ledger, 'talk vera')
+    self.assertIn('credibility 5/4', review)
+    self.assertNotIn('Supported finding: records of inflated premiums', review)
+    act(ledger, 'publish named')
+    self.assertTrue(ledger.public()['stayed'])
+    self.assertIn('ledger', ledger.public()['published'])
+    self.assertEqual(ledger.public()['evidence']['ledger']['credibility'], 1)
+
   def test_betrayed_witness_and_coerced_authentication_do_not_bypass_access(
       self,
   ):

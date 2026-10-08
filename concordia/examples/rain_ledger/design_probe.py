@@ -46,7 +46,53 @@ _FOLLOWUP = _DISCLOSURE_OPENING + [
     'talk vera',
 ]
 
+_WEAK_FAMILY = [
+    'go cafe',
+    'talk ada',
+    'investigate testimony',
+    'go narrows',
+    'go warehouse',
+    'investigate ledger stealth',
+    'go docks',
+    'go press',
+    'go mutual',
+    'talk holt',
+    'investigate carbon bargain',
+    'go press',
+    'talk vera',
+    'publish named',
+]
+
 PATHS = {
+    'family_corroboration': (
+        _WEAK_FAMILY
+        + [
+            'go mutual',
+            'go records',
+            'investigate permit',
+            'go mutual',
+            'go press',
+            'talk vera',
+            'publish records',
+        ]
+    ),
+    'family_authentication': (
+        _WEAK_FAMILY
+        + [
+            'go docks',
+            'go office',
+            'go cafe',
+            'protect iona',
+            'go narrows',
+            'go warehouse',
+            'talk iona',
+            'authenticate ledger',
+            'go docks',
+            'go press',
+            'talk vera',
+            'publish named',
+        ]
+    ),
     'clinic_betrayal_repair': [
         'go cafe',
         'go clinic',
