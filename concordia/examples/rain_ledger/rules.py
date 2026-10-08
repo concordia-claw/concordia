@@ -224,8 +224,10 @@ class Ledger(entity_component.ContextComponent):
         choices.append('restitution iona')
       if s['location'] == 'cafe' and not s['ada_informed']:
         choices.append('tell ada')
-    if s['location'] == 'press' and s['evidence'] and not s['published']:
-      choices.extend(['publish redacted', 'publish named'])
+    if s['location'] == 'press' and any(
+        key not in s['published'] for key in s['evidence']
+    ):
+      choices.extend(['publish records', 'publish redacted', 'publish named'])
     if s['location'] == 'clinic':
       choices.append('help pell')
       if 'treatment credit' in s['debts']:
@@ -324,8 +326,9 @@ class Ledger(entity_component.ContextComponent):
           )
       if committed and verb == 'publish':
         s['news'].append(
-            'The Evening Wire publishes corroborated insurance irregularities.'
-            ' Demolition is stayed; claims freeze pending inquiry.'
+            'The Evening Wire publishes '
+            + self._publication_case(target)['finding']
+            + '. Demolition is stayed; claims freeze pending inquiry.'
         )
       if committed and verb == 'settle':
         s['news'].append(
@@ -358,6 +361,112 @@ class Ledger(entity_component.ContextComponent):
           )
           and method != 'stealth',
       )
+
+  def _publication_case(self, mode):
+    """Assess only the dossier offered, using the existing evidence provenance.
+
+    Called under the ledger lock by resolution and the noncommitting review.
+    No separate case state: ownership and disclosure remain distinct.
+    """
+    owned = self.state['evidence']
+    sources = {
+        key: value
+        for key, value in owned.items()
+        if mode != 'records' or key in ('permit', 'manifest', 'carbon')
+    }
+    witness_keys = {'ledger', 'testimony', 'affidavit'}
+    independent = {
+        'iona-account' if key in witness_keys else key for key in sources
+    }
+    vulnerable = bool(set(sources) & witness_keys)
+    required = 3 if mode == 'redacted' and vulnerable else 2
+    credibility = sum(e['credibility'] for e in sources.values())
+    new_sources = [key for key in sources if key not in self.state['published']]
+    return {
+        'sources': sources,
+        'new_sources': new_sources,
+        'withheld': [
+            key
+            for key in owned
+            if key not in sources and key not in self.state['published']
+        ],
+        'independent': len(independent),
+        'required': required,
+        'credibility': credibility,
+        'vulnerable': vulnerable,
+        'ready': (
+            len(independent) >= required
+            and credibility >= 4
+            and bool(new_sources)
+        ),
+        'finding': (
+            'records of inflated premiums and false occupancy entries'
+            if set(sources) & {'ledger', 'affidavit'}
+            else (
+                'Mutual’s signed demolition rider and the disputed condemnation'
+            )
+            if 'carbon' in sources
+            else 'demolition planning before the safety findings'
+        ),
+    }
+
+  def publication_review(self):
+    """Vera's spoiler-safe assessment; never publish or take custody of papers."""
+    with self.lock:
+      s = self.state
+      lines = [
+          'Vera clears a space on the stone. “Show me what you mean to print.'
+          ' Finding a paper does not oblige you to hand it over.”'
+      ]
+      if s['published']:
+        lines.append(
+            'Already disclosed: '
+            + ', '.join(s['published'])
+            + '. A follow-up needs new evidence. Previously printed material'
+            ' cannot be withdrawn.'
+        )
+      for mode in ('records', 'redacted', 'named'):
+        case = self._publication_case(mode)
+        sources = ', '.join(case['sources']) or 'no eligible evidence held'
+        withheld = ', '.join(case['withheld']) or 'none'
+        if s['source_exposed']:
+          consequence = (
+              'Iona’s name is already public; this cannot undo that disclosure.'
+          )
+        elif mode == 'named' and case['vulnerable']:
+          consequence = (
+              'Iona accepts a charge; Ada has been told.'
+              if s['iona_testimony'] == 'voluntary' and s['ada_informed']
+              else 'Names the Saye source; risks Iona and your promise to Ada.'
+          )
+        else:
+          consequence = 'Does not name the Saye source.'
+        lines.append(
+            f'publish {mode}: use {sources}; keep private {withheld}. '
+            + (
+                'No new evidence in this dossier. '
+                if s['published'] and not case['new_sources']
+                else ''
+            )
+            + f"{'Ready' if case['ready'] else 'Not ready'}: "
+            f"{case['independent']}/{case['required']} independent sources, "
+            f"credibility {case['credibility']}/4 required. {consequence}"
+            + (
+                f" Supported finding: {case['finding']}."
+                if case['ready']
+                else ''
+            )
+        )
+      if 'Mutual confidentiality clause' in s['promises']:
+        lines.append(
+            'Any publication breaches your signed clause: $35 repayment and two'
+            ' legal heat, even with names withheld.'
+        )
+      lines.append(
+          'Reviewing is free. This review publishes or surrenders nothing. Keep'
+          ' investigating, choose a dossier, or walk away.'
+      )
+      return '\n'.join(lines)
 
   def _refresh_neighbourhood(self):
     s = self.state
@@ -436,6 +545,8 @@ class Ledger(entity_component.ContextComponent):
           True,
       )
     if verb == 'talk':
+      if target == 'vera' and location == 'press':
+        return self.publication_review(), False
       if target == 'nessa' and location == 'cafe' and s['relocation']:
         return (
             (
@@ -500,7 +611,7 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
-      if target == 'ada' and s['ada_informed']:
+      if target == 'ada' and s['ada_informed'] and s['trust']['ada'] >= 0:
         if s['iona_testimony'] == 'voluntary':
           return (
               (
@@ -525,6 +636,30 @@ class Ledger(entity_component.ContextComponent):
                 'Ada leaves your cup untouched. “You gave them her name. Bring'
                 ' help to the Narrows before you ask me for anything.” An'
                 ' apology alone will not buy back trust.'
+            ),
+            False,
+        )
+      if target == 'ada' and s['published'] and s['source_exposed']:
+        return (
+            (
+                'Ada leaves the newspaper face down. “I said I would speak to'
+                ' you again. I didn’t say the paper had forgotten her name.”'
+                ' The relief and apology reopened this conversation; they did'
+                ' not recall the story or erase your broken promise.'
+            ),
+            False,
+        )
+      if target == 'ada' and s['published'] and not s['source_exposed']:
+        s['known_leads'] = list(
+            dict.fromkeys(s['known_leads'] + ['testimony', 'ledger'])
+        )
+        return (
+            (
+                'Ada folds the newspaper around the clock photograph. “You left'
+                ' her name out. Thank you. But a stopped bulldozer isn’t a safe'
+                ' person.” She still offers her account and the lead to Bond'
+                ' Store Nine if you want to keep looking. The inquiry does not'
+                ' oblige you to take her case.'
             ),
             False,
         )
@@ -1058,50 +1193,40 @@ class Ledger(entity_component.ContextComponent):
     if verb == 'publish':
       if location != 'press':
         return 'Take your evidence to Vera at the Evening Wire.', False
-      sources = s['evidence']
-      independent = {
-          (
-              'iona-account'
-              if key in ('ledger', 'testimony', 'affidavit')
-              else key
-          )
-          for key in sources
-      }
-      if (
-          len(independent) < 2
-          or sum(e['credibility'] for e in sources.values()) < 4
-      ):
+      previously_published = list(s['published'])
+      previously_exposed = s['source_exposed']
+      if target not in ('records', 'redacted', 'named'):
         return (
             (
-                'Vera returns the folder. “Two independent sources, enough to'
-                ' withstand a denial. Come back with a document that'
-                ' corroborates this.” No evidence is lost.'
+                'Choose publish records, publish redacted, or publish named.'
+                ' Talk to Vera for a free dossier review.'
             ),
             False,
         )
-      if s['published']:
+      case = self._publication_case(target)
+      sources = case['sources']
+      vulnerable = case['vulnerable']
+      if previously_published and not case['new_sources']:
         return (
             (
-                'The story is already public. Its consequences remain; you can'
-                ' still negotiate restitution.'
+                'Vera keeps the old issue on the stone. No new evidence in this'
+                ' dossier; nothing is reprinted, charged or withdrawn.'
             ),
             False,
         )
-      if target not in ('redacted', 'named'):
-        return (
-            (
-                'Choose publish redacted to protect the source (needs three'
-                ' sources), or publish named for a faster, riskier case.'
-            ),
-            False,
+      if not case['ready']:
+        reason = (
+            'Without naming a witness, Vera needs a third independent record.'
+            if case['required'] == 3 and case['independent'] < 3
+            else 'Two independent sources with enough credibility are needed.'
         )
-      vulnerable = bool(set(sources) & {'ledger', 'testimony', 'affidavit'})
-      if target == 'redacted' and vulnerable and len(independent) < 3:
         return (
-            (
-                'Without naming a witness, Vera needs a third independent'
-                ' record. She keeps nothing; bring corroboration.'
-            ),
+            'Vera returns the offered folder. '
+            + reason
+            + ' The selected dossier contains: '
+            + (', '.join(sources) or 'no eligible evidence')
+            + '. Withheld material cannot silently fill the gap. Talk to Vera'
+            ' for a review; no evidence is lost.',
             False,
         )
       breached = 'Mutual confidentiality clause' in s['promises']
@@ -1110,37 +1235,68 @@ class Ledger(entity_component.ContextComponent):
         s['debts'].append('Mutual repayment: $35 after confidentiality breach')
         s['heat'] = min(5, s['heat'] + 2)
         s['trust']['holt'] -= 2
-      s['published'] = list(sources)
+      s['published'] = list(dict.fromkeys(previously_published + list(sources)))
       s['stayed'] = True
       s['case'] = 'public inquiry'
       consensual = s['iona_testimony'] == 'voluntary' and s['ada_informed']
-      if target == 'named' and vulnerable and consensual:
+      if (
+          target == 'named'
+          and vulnerable
+          and consensual
+          and not previously_exposed
+      ):
         s['source_exposed'] = True
         if 'protect Iona’s name' in s['promises']:
           s['promises'].remove('protect Iona’s name')
         s['trust']['ada'] += 1
         result = (
             'Vera prints Iona’s own admission beside the company records. Iona'
-            ' accepts a hearing summons; Ada will accompany her. Demolition'
-            ' stops, but your witness now faces a real charge. You paid for'
+            ' accepts a hearing summons; Ada will accompany her. Your witness'
+            ' now faces a real charge. You paid for'
             ' restitution, not immunity.'
         )
-      elif target == 'named' and vulnerable:
+      elif target == 'named' and vulnerable and not previously_exposed:
         s['source_exposed'] = True
-        s['trust']['ada'] -= 3
+        s['trust']['ada'] = min(-1, s['trust']['ada'] - 3)
         if 'protect Iona’s name' in s['promises']:
           s['promises'].remove('protect Iona’s name')
           s['debts'].append('broken promise to Ada')
         result = (
-            'The presses roll. Iona is named; her signature makes the case'
-            ' credible and puts her in danger. Ada stops answering your calls.'
+            'The presses roll. The story identifies Iona as the person behind'
+            ' the account. That gives the company someone to pursue. Ada stops'
+            ' answering your calls.'
+        )
+      elif previously_exposed:
+        result = (
+            'Vera adds the new documents to the public record. The earlier'
+            ' disclosure of Iona’s name and its harm remain.'
         )
       else:
-        s['trust']['ada'] += 2
+        if not previously_published:
+          s['trust']['ada'] += 2
         result = (
             'The records tell the story without naming a protected witness.'
             ' Vera prints the dates twice. “So nobody can say they misread'
             ' them.”'
+        )
+      if previously_published:
+        result = (
+            'Follow-up story; new evidence: '
+            + ', '.join(case['new_sources'])
+            + '. '
+            + result
+        )
+      result += ' Printed finding: ' + case['finding'] + '.'
+      if not set(sources) & {'ledger', 'affidavit'}:
+        result += (
+            ' Vera prints what these dated records support, not the whole'
+            ' insurance allegation.'
+        )
+      if target == 'records' and case['withheld']:
+        result += (
+            ' Kept out of the story and still in your casebook: '
+            + ', '.join(case['withheld'])
+            + '.'
         )
       if breached:
         result += (
@@ -1149,8 +1305,13 @@ class Ledger(entity_component.ContextComponent):
         )
       return (
           result
-          + ' Demolition stops. The frozen claims leave a relief problem you'
-          ' can choose to help solve.',
+          + (
+              ' The demolition stay remains in force.'
+              if previously_published
+              else ' Demolition stops.'
+          )
+          + ' The frozen claims leave a relief problem you can choose to help'
+          ' solve.',
           True,
       )
     if verb == 'settle':
@@ -1604,6 +1765,21 @@ def intent_options(ledger):
         else target
     )
     label = f'{command} — {meanings[verb]} {subject}'
+    if verb == 'publish':
+      label += {
+          'records': (
+              '; use only permit, manifest or carbon you hold; withhold all'
+              ' Saye material'
+          ),
+          'redacted': (
+              '; use held evidence but withhold source names; witness material'
+              ' needs three independent sources'
+          ),
+          'named': (
+              '; use all held evidence and identify its sources, including Saye'
+              ' material if held'
+          ),
+      }[target]
     if len(words) > 2:
       label += {
           'pay': '; pay $4 for evidence or $5 for tools',

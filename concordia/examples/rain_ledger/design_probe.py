@@ -19,7 +19,85 @@ import json
 from pathlib import Path
 from concordia.examples.rain_ledger import rules
 
+_DISCLOSURE_OPENING = [
+    'go cafe',
+    'promise ada',
+    'talk ada',
+    'investigate testimony',
+    'go office',
+    'go records',
+    'investigate permit',
+    'go office',
+    'go docks',
+    'talk silas',
+    'investigate manifest pay',
+    'go press',
+    'talk vera',
+]
+
+_FOLLOWUP = _DISCLOSURE_OPENING + [
+    'publish records',
+    'go docks',
+    'go warehouse',
+    'investigate ledger stealth',
+    'talk iona',
+    'go docks',
+    'go press',
+    'talk vera',
+]
+
 PATHS = {
+    'followup_redacted': (
+        _FOLLOWUP
+        + [
+            'publish redacted',
+            'publish redacted',
+            'go docks',
+            'go office',
+            'go cafe',
+            'talk ada',
+        ]
+    ),
+    'followup_named': (
+        _FOLLOWUP
+        + [
+            'publish named',
+            'publish named',
+            'go docks',
+            'go office',
+            'go cafe',
+            'talk ada',
+        ]
+    ),
+    'disclosure_records': (
+        _DISCLOSURE_OPENING
+        + [
+            'publish records',
+            'talk vera',
+            'go docks',
+            'go office',
+            'go cafe',
+            'talk ada',
+        ]
+    ),
+    'disclosure_named': (
+        _DISCLOSURE_OPENING
+        + ['publish named', 'go docks', 'go office', 'go cafe', 'talk ada']
+    ),
+    'disclosure_rebuild': [
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'go press',
+        'talk vera',
+        'publish records',
+        'go docks',
+        'talk silas',
+        'investigate manifest pay',
+        'go press',
+        'talk vera',
+        'publish records',
+    ],
     'confession': [
         'go cafe',
         'promise ada',
@@ -207,10 +285,16 @@ def play(actions):
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('--output', type=Path, required=True)
+  parser.add_argument(
+      '--path',
+      choices=PATHS,
+      action='append',
+      help='Only replay selected rule paths.',
+  )
   args = parser.parse_args()
   args.output.mkdir(parents=True, exist_ok=False)
-  for name, actions in PATHS.items():
-    transcript = play(actions)
+  for name in args.path or PATHS:
+    transcript = play(PATHS[name])
     (args.output / (name + '.json')).write_text(
         json.dumps(transcript, indent=2)
     )

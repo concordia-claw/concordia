@@ -15,7 +15,7 @@
 """Rule contract checks only: no engines, servers or language models run here."""
 
 import unittest
-from concordia.examples.rain_ledger import game, rules
+from concordia.examples.rain_ledger import content, game, rules
 from concordia.typing import entity as entity_lib
 from concordia.language_model import no_language_model
 from unittest import mock
@@ -34,6 +34,156 @@ def act(ledger, command):
 
 
 class ConsequencesTest(unittest.TestCase):
+
+  def test_betrayal_is_not_cancelled_by_goodwill_or_prior_private_conversation(
+      self,
+  ):
+    ledger = rules.Ledger()
+    ledger.state.update(location='press', ada_informed=True)
+    ledger.state['trust']['ada'] = 7
+    ledger.state['promises'] = ['protect Iona’s name']
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('permit', 'ledger')
+    }
+    act(ledger, 'publish named')
+    self.assertLess(ledger.public()['trust']['ada'], 0)
+    ledger.state['location'] = 'cafe'
+    self.assertIn('cup untouched', act(ledger, 'talk ada'))
+    act(ledger, 'apologize ada')
+    self.assertLess(ledger.public()['trust']['ada'], 0)
+    ledger.state['location'] = 'narrows'
+    act(ledger, 'help families')
+    ledger.state['location'] = 'cafe'
+    act(ledger, 'apologize ada')
+    self.assertEqual(ledger.public()['trust']['ada'], 0)
+    self.assertIn('broken promise to Ada', ledger.public()['debts'])
+    self.assertTrue(ledger.public()['source_exposed'])
+
+  def test_followup_adds_proof_without_repeat_reward_or_erasing_disclosure(
+      self,
+  ):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'press'
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('permit', 'manifest')
+    }
+    act(ledger, 'publish records')
+    trust = ledger.public()['trust']['ada']
+    before = ledger.public()
+    self.assertIn('No new evidence', act(ledger, 'publish records'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    ledger.state['evidence']['ledger'] = dict(content.EVIDENCE['ledger'])
+    self.assertIn('Follow-up story', act(ledger, 'publish named'))
+    self.assertTrue(ledger.public()['source_exposed'])
+    self.assertEqual(ledger.public()['trust']['ada'], trust - 3)
+    ledger.state['evidence']['carbon'] = dict(content.EVIDENCE['carbon'])
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    exposed_trust = restored.public()['trust']['ada']
+    self.assertIn('cannot undo that disclosure', act(restored, 'talk vera'))
+    act(restored, 'publish records')
+    self.assertEqual(
+        set(restored.public()['published']),
+        {'permit', 'manifest', 'ledger', 'carbon'},
+    )
+    self.assertTrue(restored.public()['source_exposed'])
+    self.assertEqual(restored.public()['trust']['ada'], exposed_trust)
+    self.assertTrue(restored.public()['stayed'])
+
+  def test_redacted_followup_expands_finding_without_exposure(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'press'
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('permit', 'manifest')
+    }
+    act(ledger, 'publish records')
+    trust = ledger.public()['trust']['ada']
+    ledger.state['evidence']['ledger'] = dict(content.EVIDENCE['ledger'])
+    act(ledger, 'publish redacted')
+    self.assertIn('inflated premiums', ledger.public()['news'][-1])
+    self.assertFalse(ledger.public()['source_exposed'])
+    self.assertEqual(ledger.public()['trust']['ada'], trust)
+
+  def test_record_dossier_withholds_owned_witness_material_after_restore(self):
+    ledger = rules.Ledger()
+    for action in (
+        'go cafe',
+        'promise ada',
+        'talk ada',
+        'investigate testimony',
+        'go office',
+        'go records',
+        'investigate permit',
+        'go office',
+        'go docks',
+        'talk silas',
+        'investigate manifest pay',
+        'go press',
+    ):
+      act(ledger, action)
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    before = restored.public()
+    review = act(restored, 'talk vera')
+    self.assertIn('keep private testimony', review)
+    self.assertIn('Names the Saye source', review)
+    for key in ('cash', 'turn', 'published', 'evidence', 'promises'):
+      self.assertEqual(restored.public()[key], before[key])
+    self.assertIn('publish records', restored.available())
+    exact = rules.parse_intent('publish records', mock.Mock(), restored)
+    self.assertEqual(exact['target'], 'records')
+    restored.resolve(exact)
+    state = restored.public()
+    self.assertEqual(state['published'], ['permit', 'manifest'])
+    self.assertIn(
+        'demolition planning before the safety findings', state['news'][-1]
+    )
+    self.assertNotIn('inflated premiums', state['news'][-1])
+    self.assertIn('testimony', state['evidence'])
+    self.assertIn('protect Iona’s name', state['promises'])
+    self.assertFalse(state['source_exposed'])
+    self.assertTrue(state['stayed'])
+    self.assertIn(
+        'Already disclosed: permit, manifest', act(restored, 'talk vera')
+    )
+    for action in ('go docks', 'go office', 'go cafe'):
+      act(restored, action)
+    response = act(restored, 'talk ada')
+    self.assertIn('stopped bulldozer', response)
+    self.assertNotIn('Start at Records', response)
+    self.assertIn('ledger', restored.public()['known_leads'])
+
+  def test_withheld_evidence_cannot_subsidize_an_insufficient_dossier(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'press'
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('permit', 'ledger')
+    }
+    before = ledger.public()
+    response = act(ledger, 'publish records')
+    self.assertIn('Withheld material cannot silently fill the gap', response)
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertFalse(ledger.public()['published'])
+    self.assertIn('third independent', act(ledger, 'publish redacted'))
+    act(ledger, 'publish named')
+    self.assertEqual(ledger.public()['published'], ['permit', 'ledger'])
+    self.assertTrue(ledger.public()['source_exposed'])
+
+  def test_records_only_still_breaches_paid_confidentiality(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'press'
+    ledger.state['promises'] = ['Mutual confidentiality clause']
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('permit', 'manifest')
+    }
+    self.assertIn('$35 repayment and two legal heat', act(ledger, 'talk vera'))
+    act(ledger, 'publish records')
+    self.assertIn(
+        'Mutual repayment: $35 after confidentiality breach',
+        ledger.public()['debts'],
+    )
+    self.assertEqual(ledger.public()['heat'], 2)
+    self.assertFalse(ledger.public()['source_exposed'])
 
   def test_treatment_credit_can_be_deferred_then_worked_off_once(self):
     ledger = rules.Ledger()

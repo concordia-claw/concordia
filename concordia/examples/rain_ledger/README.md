@@ -57,6 +57,20 @@ workplaces. The job board contains the advertised offer, not the concealed
 complication. A clue must be learned before it can be pursued. Documents retain
 their provenance; a duplicate is useful collateral but never a new witness.
 
+At the Evening Wire, `talk vera` reviews the actual dossier for free. Choose
+`publish records` to use only held civic/company records (permit, manifest,
+carbon), keeping all Saye material private; `publish redacted` uses the full
+dossier with source names withheld and requires extra corroboration for witness
+material; `publish named` identifies the sources you submit. The review shows
+readiness and any confidentiality repayment before commitment. Merely collecting
+a private paper does not oblige you to print it. New evidence supports a later
+follow-up story; previously published evidence and identities cannot be recalled,
+and resubmitting the same dossier gives no reward. The printed finding reflects
+the offered papers, rather than automatically declaring the whole conspiracy
+proved. A later betrayal closes access regardless of earlier goodwill; earned
+relief/apology can reopen conversation without erasing the disclosure.
+
+
 Looking and ordinary conversation are free. Travel, work, risk and waiting
 commit fictional time. Every eight commitments the office charges up to $3;
 unpaid upkeep becomes an obligation. Injury blocks force and high heat blocks
