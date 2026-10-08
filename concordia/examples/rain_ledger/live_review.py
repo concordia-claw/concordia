@@ -451,7 +451,8 @@ def main():
           'permit' in state['copies']
           and state['settlement'] == 'self'
           and state['stayed']
-          and not state['photo_exposed']
+          and state['photo_exposed']
+          and state['trust']['pell'] >= 0
           and 'Mutual repayment: $35 after confidentiality breach'
           not in state['debts']
       )

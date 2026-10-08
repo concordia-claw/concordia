@@ -738,7 +738,7 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
-      if target == 'pell' and s['photo_exposed']:
+      if target == 'pell' and s['photo_exposed'] and s['trust']['pell'] < 0:
         return (
             (
                 'Pell sets your photograph on the desk. “The client printed it.'
@@ -747,6 +747,13 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      if target == 'pell' and s['photo_exposed'] and s['trust']['pell'] >= 0:
+        return (
+            'Pell puts a route slip beside the old clipping. “You did the'
+            ' repair work. I can trust you with a case again. The family still'
+            ' has to live with that picture.” Paid work and treatment are'
+            ' available; the photograph remains circulated.'
+        ), False
       if target == 'pell' and 'treatment credit' in s['debts']:
         return (
             (
@@ -1184,6 +1191,13 @@ class Ledger(entity_component.ContextComponent):
               ),
               False,
           )
+        if s['photo_exposed'] and s['trust']['pell'] < 0:
+          return (
+              'Pell keeps the delivery case behind the desk. “You put a'
+              ' patient’s family in print. Help repair that harm first.” Use'
+              ' help pell for an unpaid repair shift; treatment remains'
+              ' available.'
+          ), False
         s['jobs'][target] = 'carrying'
         s['inventory'].append('cold medicine')
         return (
@@ -1251,7 +1265,7 @@ class Ledger(entity_component.ContextComponent):
       elif target == 'photograph':
         if method == 'sell':
           s['photo_exposed'] = True
-          s['trust']['pell'] -= 2
+          s['trust']['pell'] = min(-1, s['trust']['pell'] - 2)
           s['heat'] = min(5, s['heat'] + 1)
           result = (
               'The client pays and circulates the photograph under your byline.'
@@ -1292,7 +1306,8 @@ class Ledger(entity_component.ContextComponent):
       s['inventory'].remove('cold medicine')
       s['jobs']['medicine'] = 'complete:delivered'
       s['cash'] += 9
-      s['trust']['pell'] += 1
+      if not (s['photo_exposed'] and s['trust']['pell'] < 0):
+        s['trust']['pell'] += 1
       s['relief'] += 1
       debt = 'union guarantee: carry medicine for the crew'
       if debt in s['debts']:
@@ -1702,7 +1717,8 @@ class Ledger(entity_component.ContextComponent):
               False,
           )
         s['debts'].remove('treatment credit')
-        s['trust']['pell'] += 1
+        if not (s['photo_exposed'] and s['trust']['pell'] < 0):
+          s['trust']['pell'] += 1
         return (
             (
                 'You wash the instruments and restock the linen cupboard. Pell'
@@ -1816,8 +1832,7 @@ class Ledger(entity_component.ContextComponent):
       ), True
     if verb == 'help':
       if target == 'pell' and location == 'clinic':
-        if s['photo_exposed']:
-          s['photo_exposed'] = False
+        if s['photo_exposed'] and s['trust']['pell'] < 0:
           s['trust']['pell'] = max(0, s['trust']['pell'])
           return (
               (

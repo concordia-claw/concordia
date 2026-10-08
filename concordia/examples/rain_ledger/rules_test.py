@@ -289,7 +289,9 @@ class ConsequencesTest(unittest.TestCase):
     restored = rules.Ledger()
     restored.set_state(saved)
     restored.state['photo_exposed'] = True
+    restored.state['trust']['pell'] = -1
     act(restored, 'repay pell')
+    self.assertEqual(restored.public()['trust']['pell'], -1)
     self.assertEqual(restored.public()['cash'], 6)
     self.assertNotIn('treatment credit', restored.public()['debts'])
     self.assertTrue(restored.public()['photo_exposed'])
@@ -525,6 +527,47 @@ class ResidentPolicyTest(unittest.TestCase):
         game.RainSession(ledger).snapshot()['jobs']['medicine']['followup']
     )
     self.assertIn('settled', act(ledger, 'job medicine'))
+
+  def test_clinic_goodwill_does_not_erase_later_photo_betrayal(self):
+    ledger = rules.Ledger()
+    ledger.state.update(location='clinic')
+    for _ in range(3):
+      act(ledger, 'help pell')
+    ledger.state['location'] = 'mutual'
+    act(ledger, 'job photograph')
+    act(ledger, 'job photograph sell')
+    self.assertLess(ledger.public()['trust']['pell'], 0)
+    ledger.state['location'] = 'clinic'
+    before = ledger.public()
+    self.assertIn('unpaid repair', act(ledger, 'job medicine'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertNotIn('cold medicine', ledger.public()['inventory'])
+    act(ledger, 'help pell')
+    self.assertTrue(ledger.public()['photo_exposed'])
+    act(ledger, 'job medicine')
+    self.assertIn('cold medicine', ledger.public()['inventory'])
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    self.assertIn('old clipping', act(restored, 'talk pell'))
+    cash = restored.public()['cash']
+    response = act(restored, 'help pell')
+    self.assertIn('Six dollars', response)
+    upkeep = 3 if restored.public()['turn'] % 8 == 0 else 0
+    self.assertEqual(restored.public()['cash'], cash + 6 - upkeep)
+    self.assertTrue(restored.public()['photo_exposed'])
+
+  def test_existing_clinic_delivery_is_honoured_after_photo_betrayal(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'clinic'
+    act(ledger, 'job medicine')
+    ledger.state['location'] = 'mutual'
+    act(ledger, 'job photograph')
+    act(ledger, 'job photograph sell')
+    ledger.state['location'] = 'narrows'
+    cash = ledger.public()['cash']
+    act(ledger, 'deliver medicine')
+    self.assertEqual(ledger.public()['cash'], cash + 9)
+    self.assertLess(ledger.public()['trust']['pell'], 0)
 
   def test_medicine_is_not_paid_until_physical_delivery(self):
     ledger = rules.Ledger()

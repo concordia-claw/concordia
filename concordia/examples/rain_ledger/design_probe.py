@@ -47,6 +47,32 @@ _FOLLOWUP = _DISCLOSURE_OPENING + [
 ]
 
 PATHS = {
+    'clinic_betrayal_repair': [
+        'go cafe',
+        'go clinic',
+        'help pell',
+        'help pell',
+        'help pell',
+        'go cafe',
+        'go office',
+        'go records',
+        'go mutual',
+        'job photograph',
+        'job photograph sell',
+        'go records',
+        'go office',
+        'go cafe',
+        'go clinic',
+        'talk pell',
+        'job medicine',
+        'help pell',
+        'talk pell',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go clinic',
+        'help pell',
+    ],
     'medicine_before_tools': [
         'refuse case',
         'go cafe',
