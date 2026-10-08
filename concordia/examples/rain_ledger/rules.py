@@ -778,8 +778,8 @@ class Ledger(entity_component.ContextComponent):
               ' 4407. And if you find her, don’t sell her name.”'
           ),
           'nessa': (
-              '“I have beds for six, notices for forty. Bring me something that'
-              ' stops a bulldozer, not a speech.”'
+              f'“I have {s["shelter_beds"]} beds open, notices for forty. Bring'
+              ' me something that stops a bulldozer, not a speech.”'
           ),
           'silas': (
               '“Tools in a cage. Men outside it. Fix that and I’ll open the'

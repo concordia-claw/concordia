@@ -301,6 +301,33 @@ JOB_PROGRESS = {
     },
 }
 
+# Local service knowledge for spoken answers, not undiscovered case truth.
+CONVERSATION_SERVICES = {
+    'ada': (
+        'Your priority is Iona’s safety. A relocation agreement does not'
+        ' require ending the search or surrendering evidence. No settlement'
+        ' terms have been accepted merely by discussing them. Do not invent'
+        ' conditions.'
+    ),
+    'nessa': (
+        'A $3 food parcel delivered in the Narrows supplies one evening.'
+        ' Tenant organising costs time, not cash. Two verified representatives'
+        ' and a public stay allow negotiation of six evenings of company relief'
+        ' instead of relocation bonds. Donations do not buy rent, repairs,'
+        ' solicitors or a demolition stay. Do not offer those services.'
+    ),
+    'pell': (
+        'You offer treatment and delivery work. Respect any recorded refusal'
+        ' of new paid work. Repair restores working access, not privacy or the'
+        ' erasure of a circulated photograph. Never invent a medical diagnosis.'
+    ),
+    'holt': (
+        'Discussion signs nothing. A signed agreement uses one company'
+        ' allocation; relocation, personal consultancy and emergency relief'
+        ' are alternatives. It does not seize papers or force anyone to move.'
+    ),
+}
+
 NPCS: dict[str, ResidentSpec] = {
     'Nessa Rook': {
         'home': 'cafe',

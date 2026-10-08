@@ -20,13 +20,15 @@ import os
 from pathlib import Path
 import threading
 import time
+from typing import cast
 
-from concordia.contrib import language_models
+from concordia.contrib.language_models.together import together_ai_model
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.rain_ledger import game
 from concordia.examples.rain_ledger import rules
 from concordia.examples.rain_ledger.smoke import until
 from concordia.language_model import call_limit_wrapper
+import together
 
 PATHS = {
     'conversation': [
@@ -183,6 +185,21 @@ PATHS = {
 }
 
 
+def protected_together_model(model_name, credential):
+  """Use the standard adapter with an explicitly authorized SDK endpoint."""
+  client = together.Together(
+      api_key=credential,
+      base_url='https://api.together.xyz/v1',
+      max_retries=0,
+      timeout=30,
+  )
+  return together_ai_model.Base(
+      model_name=model_name,
+      api_key=credential,
+      client=cast(together_ai_model.TogetherClient, client),
+  )
+
+
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--path', choices=PATHS, required=True)
@@ -205,9 +222,7 @@ def main():
     )
     if not credential:
       parser.error('Together requires an inherited protected credential')
-    base_model = language_models.language_model_setup(
-        api_type='together_ai', model_name=args.model, api_key=credential
-    )
+    base_model = protected_together_model(args.model, credential)
   else:
     base_model = ollama_model.OllamaLanguageModel(
         args.model,

@@ -275,7 +275,7 @@ class PortAuthority(switch_act.SwitchAct):
       ):
         try:
           speech, dialogue_log = self.dialogue(target, spoken_attempt, result)
-          result += speech
+          result = speech
         except Exception as exc:
           self._logging_channel({'dialogue_failure': type(exc).__name__})
           result += (
@@ -307,22 +307,41 @@ class PortAuthority(switch_act.SwitchAct):
   def dialogue(self, contact, attempt, ruling):
     """Character speech can respond to a subject but cannot grant game effects."""
     name, _, voice = c.CONTACTS[contact]
+    state = self.ledger.public()
+    local_facts = c.CONVERSATION_SERVICES.get(contact, '')
+    if contact == 'nessa':
+      local_facts += (
+          f" Open shelter beds: {state['shelter_beds']}; verified"
+          f" block representatives: {state['petition']}."
+      )
+    repeated = any(entry['result'] == ruling for entry in state['history'][:-1])
     text = self.model.sample_text(
         f'Speak in FIRST PERSON as {name}. Voice: {voice}\n'
         f'The investigator asks: {attempt}\n'
         f'Established facts and binding stance: {ruling}\n'
+        f'Your known services and their limits: {local_facts}\n'
         'Answer the actual question in one or two NEW short sentences. Do not'
         ' repeat the recorded wording or narrate stage directions. Do not add'
         ' names, clues, facts, promises, actions, payments or relationship'
-        ' changes. Preserve any refusal. No rain metaphors. Plain spoken text'
+        ' changes. When asked how to help, describe only established services;'
+        ' if the requested service does not exist, say so and offer the closest'
+        ' available help without pretending it achieves the same goal.'
+        ' Preserve any refusal. No rain metaphors. Plain spoken text'
         ' only, no JSON or speaker label.',
         max_tokens=100,
         temperature=0.4,
     )
-    record = {'speaker': name, 'subject': attempt, 'model_reply': text}
+    record = {
+        'speaker': name,
+        'subject': attempt,
+        'model_reply': text,
+        'local_facts': local_facts,
+        'repeated_ruling': repeated,
+    }
     if not text.strip():
-      return '\nNo further reply; the recorded facts stand.', record
-    return f'\n{name}: “{text.strip()}”', record
+      return ruling, record
+    prefix = '' if repeated else ruling + '\n'
+    return prefix + f'{name}: “{text.strip()}”', record
 
 
 def configuration(ledger, session):

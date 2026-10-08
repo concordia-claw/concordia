@@ -33,6 +33,69 @@ def act(ledger, command):
   )
 
 
+class ProtectedReviewTest(unittest.TestCase):
+
+  def test_review_client_uses_only_authorized_endpoint_without_sdk_retries(
+      self,
+  ):
+    from concordia.examples.rain_ledger import live_review
+
+    with mock.patch.object(live_review.together, 'Together') as client:
+      model = live_review.protected_together_model(
+          'deepseek-ai/DeepSeek-V4.1-Flash', 'test-placeholder'
+      )
+    self.assertIsNotNone(model)
+    self.assertEqual(
+        client.call_args.kwargs['base_url'], 'https://api.together.xyz/v1'
+    )
+    self.assertEqual(client.call_args.kwargs['max_retries'], 0)
+    self.assertNotIn('verify', client.call_args.kwargs)
+
+
+class ConversationPresentationTest(unittest.TestCase):
+
+  def test_repeated_ruling_is_not_replayed_before_each_spoken_answer(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'cafe'
+    model = mock.Mock()
+    model.sample_text.return_value = 'I want her home safely.'
+    authority = game.PortAuthority(ledger, model, game.RainSession(ledger))
+    first = act(ledger, 'talk ada')
+    response, record = authority.dialogue('ada', 'What do you want?', first)
+    self.assertIn(first, response)
+    self.assertFalse(record['repeated_ruling'])
+    repeated = act(ledger, 'talk ada')
+    response, record = authority.dialogue('ada', 'And after that?', repeated)
+    self.assertNotIn(first, response)
+    self.assertTrue(record['repeated_ruling'])
+    model.sample_text.return_value = ''
+    response, _ = authority.dialogue('ada', 'And after that?', repeated)
+    self.assertEqual(response, repeated)
+    ledger.state['trust']['ada'] = -1
+    changed = act(ledger, 'talk ada')
+    model.sample_text.return_value = 'Not now.'
+    response, _ = authority.dialogue('ada', 'Will you help?', changed)
+    self.assertIn(changed, response)
+
+  def test_nessa_knows_local_capacity_and_only_supported_donation_services(
+      self,
+  ):
+    ledger = rules.Ledger()
+    ledger.state.update(location='cafe', shelter_beds=2, petition=1)
+    model = mock.Mock()
+    model.sample_text.return_value = 'A food parcel would help.'
+    authority = game.PortAuthority(ledger, model, game.RainSession(ledger))
+    ruling = act(ledger, 'talk nessa')
+    self.assertIn('2 beds open', ruling)
+    _, record = authority.dialogue('nessa', 'What does a donation buy?', ruling)
+    prompt = model.sample_text.call_args.args[0]
+    self.assertIn('$3 food parcel', prompt)
+    self.assertIn('Open shelter beds: 2', prompt)
+    self.assertNotIn('countersigned', record['local_facts'])
+    self.assertNotIn('counter-ledger', record['local_facts'])
+    self.assertEqual(ledger.public()['cash'], 18)
+
+
 class ConsequencesTest(unittest.TestCase):
 
   def test_betrayed_witness_and_coerced_authentication_do_not_bypass_access(
