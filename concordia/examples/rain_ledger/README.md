@@ -234,3 +234,13 @@ call limit is not an HTTP-request or monetary cap. Exhausting it invalidates a
 live-quality result. The `conversation` path adds held-out questions,
 hypotheticals, refusal and multi-action probes; its real-model result is pending.
 Every such run is an actual engine launch and requires the workspace launch gate.
+
+After a published stay, `settle relief` at Mutual reviews a tenant-administered
+supply agreement. Two verified block representatives (Nessa’s organising) are
+required. `settle relief accept` funds six evenings without waiving claims, but
+uses the company allocation otherwise available for relocation. Review is free;
+walking away remains possible. This branch has offline rule evidence only.
+
+Evidence obtained covertly or by force now records disputed custody. Witnessed
+authentication can restore credibility without erasing heat or the acquisition
+record; independent corroboration is an alternative to returning to the holder.

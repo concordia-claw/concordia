@@ -52,7 +52,16 @@ VERBS = (
     'testify',
     'tell',
 )
-METHODS = ('careful', 'bargain', 'stealth', 'force', 'pay', 'sell', 'warn')
+METHODS = (
+    'careful',
+    'bargain',
+    'stealth',
+    'force',
+    'pay',
+    'sell',
+    'warn',
+    'accept',
+)
 
 
 class Ledger(entity_component.ContextComponent):
@@ -242,6 +251,8 @@ class Ledger(entity_component.ContextComponent):
         choices.append('repay pell')
     if s['location'] == 'office' and 'office rent' in s['debts']:
       choices.append('repay rent')
+    if s['location'] == 'mutual' and s['stayed'] and not s['settlement']:
+      choices.append('settle relief')
     return choices + ['look', 'rest']
 
   def _record(self, actor, attempt, result, before, *, visible=False):
@@ -344,6 +355,8 @@ class Ledger(entity_component.ContextComponent):
             + (
                 'relocation bonds for Narrows families.'
                 if target == 'families'
+                else 'six evenings of tenant-administered emergency relief.'
+                if target == 'relief'
                 else (
                     'a consultancy payment to Rowan Vale; no relocation'
                     ' provision.'
@@ -486,6 +499,11 @@ class Ledger(entity_component.ContextComponent):
     ]
     if s['relocation']:
       parts.append('Relocation bonds funded; families can leave together.')
+    if s['settlement'] == 'relief':
+      parts.append(
+          'Tenant relief agreement signed; relocation allocation spent, claims'
+          ' retained.'
+      )
     if s['published']:
       parts.append('Claims frozen during inquiry; relief is needed.')
     if s['relief']:
@@ -556,6 +574,35 @@ class Ledger(entity_component.ContextComponent):
     if verb == 'talk':
       if target == 'vera' and location == 'press':
         return self.publication_review(), False
+      if (
+          target == 'nessa'
+          and location == 'cafe'
+          and s['settlement'] == 'relief'
+      ):
+        return (
+            (
+                'Nessa pins the supplier receipts beside the petition. “Six'
+                ' evenings bought. Nobody signed away a claim. After that, we'
+                ' still have to live here.” The company relocation allocation'
+                ' is spent; the inquiry and your other work remain open.'
+            ),
+            False,
+        )
+      if (
+          target == 'nessa'
+          and location == 'cafe'
+          and s['stayed']
+          and not s['settlement']
+      ):
+        return (
+            '“A stay is not supper.” Nessa taps the petition. With two verified'
+            ' block representatives, Mutual can fund six evenings of relief'
+            ' instead of relocation bonds. Families retain their claims.'
+            f" Representatives: {s['petition']}/2 required. Review settle"
+            ' relief'
+            ' at Mutual; you need not accept. Nessa continues organising.',
+            False,
+        )
       if target == 'nessa' and location == 'cafe' and s['relocation']:
         return (
             (
@@ -1471,6 +1518,50 @@ class Ledger(entity_component.ContextComponent):
           True,
       )
     if verb == 'settle':
+      if target == 'relief':
+        if location != 'mutual':
+          return 'Review the relief agreement at Mutual.', False
+        if s['settlement']:
+          return (
+              (
+                  'The company allocation is already committed. Your signed'
+                  ' agreement stands.'
+              ),
+              False,
+          )
+        if not s['stayed']:
+          return (
+              (
+                  'Holt will discuss interim relief after a public stay;'
+                  ' relocation talks remain open.'
+              ),
+              False,
+          )
+        if s['petition'] < 2:
+          return (
+              'Holt demands two verified block representatives to administer'
+              ' the fund. Nessa is organising the petition; no papers or money'
+              ' change hands.'
+          ), False
+        if method != 'accept':
+          return (
+              'Written terms: six evenings of supplies, administered by the'
+              ' tenant representatives. No personal fee, confidentiality'
+              ' clause, claim waiver or surrender of evidence. This uses the'
+              ' company allocation: relocation bonds will no longer be'
+              ' available. The stay remains; permanent housing is not'
+              ' guaranteed. Use settle relief accept to sign, settle families'
+              ' to seek relocation instead, or walk away.'
+          ), False
+        s['settlement'] = 'relief'
+        s['relief'] += 6
+        s['trust']['nessa'] += 2
+        return (
+            'Holt signs the supply order; the block representatives'
+            ' counter-sign as administrators. Six evenings are funded. Families'
+            ' keep their claims and the stay; the relocation allocation is'
+            ' spent. You keep the papers and receive no fee.'
+        ), True
       required = (
           1
           if 'secured copy pledged for Mutual relocation audit' in s['promises']
@@ -1493,7 +1584,8 @@ class Ledger(entity_component.ContextComponent):
         return (
             (
                 'State whose payment you demand: settle families, or settle'
-                ' self. You keep your evidence either way.'
+                ' self; after a public stay, settle relief reviews emergency'
+                ' supplies. You keep your evidence.'
             ),
             False,
         )
@@ -1776,7 +1868,9 @@ class Ledger(entity_component.ContextComponent):
           s['petition'] = min(3, s['petition'] + 1)
           result = (
               "The tenants' petition gains a verified block representative"
-              f" ({s['petition']}/3). It can reinforce a relocation demand."
+              f" ({s['petition']}/3). Two representatives can administer six"
+              ' evenings of relief after a public stay, instead of relocation'
+              ' bonds.'
           )
       elif name == 'Silas Marr':
         if move == 'petition':
@@ -1853,6 +1947,8 @@ def intent_options(ledger):
         'settle self',
         'repay mutual',
     ]
+  if location == 'mutual' and s['stayed'] and not s['settlement']:
+    commands += ['settle relief', 'settle relief accept']
   if location == 'docks':
     commands += ['barter silas']
   for key, status in s['jobs'].items():
@@ -1950,6 +2046,11 @@ def intent_options(ledger):
           'bargain': '; negotiate an exchange',
           'sell': '; sell and circulate the photograph',
           'warn': '; warn the family, lower fee',
+          'accept': (
+              '; sign six evenings of tenant relief, no personal fee;'
+              ' permanently forgo company relocation bonds; retain claims and'
+              ' evidence'
+          ),
       }[method]
     if verb == 'investigate' and method in ('stealth', 'force'):
       label += (
@@ -1976,6 +2077,7 @@ def parse_intent(text, model, ledger):
           'rent',
           'affidavit',
           'families',
+          'relief',
           'self',
           'case',
           'source',

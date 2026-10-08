@@ -499,6 +499,72 @@ class ResidentPolicyTest(unittest.TestCase):
     self.assertIn('Two independent sources', act(ledger, 'publish named'))
 
 
+class ReliefAgreementTest(unittest.TestCase):
+
+  def ready(self):
+    ledger = rules.Ledger()
+    for command in (
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon bargain',
+        'go press',
+        'publish records',
+    ):
+      act(ledger, command)
+    ledger.npc_resolve('Nessa Rook', 'organise', '')
+    act(ledger, 'go mutual')
+    ledger.npc_resolve('Nessa Rook', 'organise', '')
+    return ledger
+
+  def test_representatives_and_stay_required_not_player_cash(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'mutual'
+    self.assertIn('public stay', act(ledger, 'settle relief accept'))
+    ledger.state['stayed'] = True
+    self.assertIn('representatives', act(ledger, 'settle relief accept'))
+    self.assertEqual(ledger.public()['settlement'], '')
+    self.assertEqual(ledger.public()['turn'], 0)
+
+  def test_review_then_relief_preserves_claims_and_excludes_relocation(self):
+    ledger = self.ready()
+    before = ledger.public()
+    self.assertIn(
+        'relocation bonds will no longer', act(ledger, 'settle relief')
+    )
+    for key in ('cash', 'turn', 'relief', 'settlement', 'evidence', 'promises'):
+      self.assertEqual(ledger.public()[key], before[key])
+    options = rules.intent_options(ledger)
+    self.assertTrue(any('permanently forgo' in label for label in options))
+    act(ledger, 'settle relief accept')
+    self.assertEqual(ledger.public()['relief'], 6)
+    self.assertFalse(ledger.public()['relocation'])
+    self.assertEqual(ledger.public()['evidence'], before['evidence'])
+    self.assertEqual(ledger.public()['promises'], before['promises'])
+    self.assertTrue(ledger.public()['stayed'])
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    after = restored.public()
+    self.assertIn('stands', act(restored, 'settle families'))
+    self.assertIn('already committed', act(restored, 'settle relief accept'))
+    self.assertEqual(restored.public()['relief'], after['relief'])
+    self.assertEqual(restored.public()['turn'], after['turn'])
+    self.assertIn('tenant-administered', restored.public()['news'][-1])
+    act(restored, 'go records')
+    act(restored, 'go office')
+    act(restored, 'go cafe')
+    self.assertIn('Nobody signed away', act(restored, 'talk nessa'))
+
+  def test_review_can_be_refused_for_relocation(self):
+    ledger = self.ready()
+    act(ledger, 'settle relief')
+    act(ledger, 'settle families')
+    self.assertTrue(ledger.public()['relocation'])
+    self.assertEqual(ledger.public()['relief'], 0)
+    self.assertIn('already committed', act(ledger, 'settle relief accept'))
+
+
 class RecoveryTest(unittest.TestCase):
 
   def test_confidentiality_terms_precede_acceptance_and_breach_is_repayable(

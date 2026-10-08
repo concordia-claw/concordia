@@ -285,9 +285,11 @@ NPCS: dict[str, ResidentSpec] = {
         'moves': ['organise', 'shelter'],
         'affordances': (
             'organise adds one verified block representative to the tenants'
-            ' petition, up to three; shelter opens two beds above your cafe, up'
-            ' to eight. Families need both an immediate place to sleep and a'
-            ' collective claim. Wait if your work is already sufficient.'
+            ' petition, up to three. Two representatives can administer company'
+            ' emergency relief after a public stay, instead of relocation'
+            ' bonds; shelter opens two beds above your cafe, up to eight.'
+            ' Families need both an immediate place to sleep and a collective'
+            ' claim. Wait if your work is already sufficient.'
         ),
         'voice': 'Practical, warm, refuses grand speeches.',
     },
