@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Bounded real-local-model contrasting plays; launches the standard engine."""
+"""Bounded real-model contrasting plays; launches the standard engine."""
 
 import argparse
 import json
+import os
 from pathlib import Path
 import threading
 import time
 
+from concordia.contrib import language_models
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.rain_ledger import game
 from concordia.examples.rain_ledger import rules
@@ -27,6 +29,22 @@ from concordia.examples.rain_ledger.smoke import until
 from concordia.language_model import call_limit_wrapper
 
 PATHS = {
+    'conversation': [
+        'go cafe',
+        'Ada, would a newspaper story put your sister in danger?',
+        'Nessa, how would you use a donation if I could afford one?',
+        (
+            'I am not promising anything. Ada, tell me what finding her would'
+            ' mean to you.'
+        ),
+        'Before I decide, ask Ada whether she would accept a quiet settlement.',
+        (
+            'Ask Ada about Iona, then pay for a hiding place and leave for the'
+            ' docks.'
+        ),
+        'No deal yet. I only want to take in the room.',
+        'look',
+    ],
     'compromise': [
         'go records',
         'investigate permit',
@@ -169,23 +187,40 @@ def main():
   parser.add_argument('--path', choices=PATHS, required=True)
   parser.add_argument('--model', default='llama3.2:3b')
   parser.add_argument('--no-think', action='store_true')
+  parser.add_argument(
+      '--backend', choices=('ollama', 'together_ai'), default='ollama'
+  )
+  parser.add_argument('--max-calls', type=int, default=120)
   parser.add_argument('--checkpoint', type=Path)
   parser.add_argument('--output', type=Path, required=True)
   args = parser.parse_args()
   args.output.mkdir(parents=True, exist_ok=False)
+  if args.max_calls < 1:
+    parser.error('--max-calls must be positive')
+  if args.backend == 'together_ai':
+    # Consume inherited protected credentials; never persist or display them.
+    credential = os.environ.get('TOGETHER_API_KEY') or os.environ.get(
+        'TOGETHER_AI_API_KEY'
+    )
+    if not credential:
+      parser.error('Together requires an inherited protected credential')
+    base_model = language_models.language_model_setup(
+        api_type='together_ai', model_name=args.model, api_key=credential
+    )
+  else:
+    base_model = ollama_model.OllamaLanguageModel(
+        args.model,
+        think=False if args.no_think else None,
+        request_timeout=60,
+        max_output_tokens=180,
+        response_format=None,
+        system_message=(
+            'Follow the requested format. Choose only a supplied option when'
+            ' asked to choose.'
+        ),
+    )
   model = call_limit_wrapper.CallLimitLanguageModel(
-      ollama_model.OllamaLanguageModel(
-          args.model,
-          think=False if args.no_think else None,
-          request_timeout=60,
-          max_output_tokens=180,
-          response_format=None,
-          system_message=(
-              'Follow the requested format. Choose only a supplied option when'
-              ' asked to choose.'
-          ),
-      ),
-      max_calls=120,
+      base_model, max_calls=args.max_calls
   )
   instance = game.Game(model, args.output, checkpoint=args.checkpoint)
   errors = []
@@ -200,6 +235,14 @@ def main():
   worker.start()
   transcript = []
   expected_by_path = {
+      'conversation': {
+          1: ('talk', 'ada', 'careful'),
+          2: ('talk', 'nessa', 'careful'),
+          3: ('talk', 'ada', 'careful'),
+          4: ('talk', 'ada', 'careful'),
+          5: ('unclear', '', 'careful'),
+          6: ('look', '', 'careful'),
+      },
       'compromise': {
           3: ('copy', 'permit', 'careful'),
           6: ('barter', 'holt', 'careful'),
@@ -332,6 +375,16 @@ def main():
         assert 'permit' in after['copies'], 'Copy still failed after correction'
       if args.path == 'refusal' and index == 0:
         assert after['case'] == 'declined'
+      if args.path == 'conversation' and index > 0:
+        for key in (
+            'cash',
+            'turn',
+            'location',
+            'promises',
+            'debts',
+            'inventory',
+        ):
+          assert after[key] == before[key], f'Conversation committed {key}'
       if args.path == 'intent':
         checks = {
             0: after['case'] == 'declined',
@@ -356,7 +409,17 @@ def main():
     instance.checkpoint()
     instance.export_log()
     state = instance.ledger.get_state()
-    if args.path == 'compromise':
+    # The standard call limiter falls back after exhaustion. Never count those
+    # synthetic responses as live-model success; this driver inspects its count.
+    calls = model._calls  # pylint: disable=protected-access
+    assert (
+        calls < args.max_calls
+    ), 'Call limit reached; live quality result invalid'
+    if args.path == 'conversation':
+      passed = (
+          state['turn'] == 1 and state['cash'] == 18 and not state['promises']
+      )
+    elif args.path == 'compromise':
       passed = (
           state['relocation']
           and not state['stayed']
@@ -414,7 +477,10 @@ def main():
             for entry in transcript
             if entry['reviewer_correction']
         ],
-        'backend': args.model,
+        'backend': args.backend,
+        'model': args.model,
+        'logical_calls': calls,
+        'max_calls': args.max_calls,
         'path': args.path,
         'passed': passed,
         'state': state,

@@ -35,6 +35,45 @@ def act(ledger, command):
 
 class ConsequencesTest(unittest.TestCase):
 
+  def test_treatment_credit_can_be_deferred_then_worked_off_once(self):
+    ledger = rules.Ledger()
+    ledger.state.update(location='clinic', cash=0, injury=2)
+    response = act(ledger, 'rest')
+    self.assertIn('repay pell', response)
+    self.assertIn('repay pell', ledger.available())
+    self.assertIn('treatment credit', ledger.public()['debts'])
+    act(ledger, 'help pell')  # Earning money need not automatically repay debt.
+    self.assertEqual(ledger.public()['cash'], 6)
+    self.assertIn('treatment credit', ledger.public()['debts'])
+    saved = ledger.get_state()
+    restored = rules.Ledger()
+    restored.set_state(saved)
+    restored.state['photo_exposed'] = True
+    act(restored, 'repay pell')
+    self.assertEqual(restored.public()['cash'], 6)
+    self.assertNotIn('treatment credit', restored.public()['debts'])
+    self.assertTrue(restored.public()['photo_exposed'])
+    turn = restored.public()['turn']
+    act(restored, 'repay pell')
+    self.assertEqual(restored.public()['turn'], turn)
+    self.assertNotIn('repay pell', restored.available())
+
+  def test_deferred_rent_has_reachable_exact_and_natural_affordance(self):
+    ledger = rules.Ledger()
+    ledger.state.update(cash=5, debts=['office rent'])
+    self.assertIn('repay rent', ledger.available())
+    intent = rules.parse_intent('repay rent', mock.Mock(), ledger)
+    self.assertEqual(intent['target'], 'rent')
+    self.assertTrue(
+        any(
+            i.get('target') == 'rent'
+            for i in rules.intent_options(ledger).values()
+        )
+    )
+    ledger.resolve(intent)
+    self.assertEqual(ledger.public()['cash'], 2)
+    self.assertNotIn('office rent', ledger.public()['debts'])
+
   def test_initial_player_view_does_not_reveal_missing_bookkeeper(self):
     session = game.RainSession(rules.Ledger())
     view = session.snapshot()

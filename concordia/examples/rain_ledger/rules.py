@@ -226,6 +226,12 @@ class Ledger(entity_component.ContextComponent):
         choices.append('tell ada')
     if s['location'] == 'press' and s['evidence'] and not s['published']:
       choices.extend(['publish redacted', 'publish named'])
+    if s['location'] == 'clinic':
+      choices.append('help pell')
+      if 'treatment credit' in s['debts']:
+        choices.append('repay pell')
+    if s['location'] == 'office' and 'office rent' in s['debts']:
+      choices.append('repay rent')
     return choices + ['look', 'rest']
 
   def _record(self, actor, attempt, result, before, *, visible=False):
@@ -528,6 +534,16 @@ class Ledger(entity_component.ContextComponent):
                 'Pell sets your photograph on the desk. “The client printed it.'
                 ' I treat everyone, including you. But the paid routes go to'
                 ' people my patients can trust. Help repair the harm.”'
+            ),
+            False,
+        )
+      if target == 'pell' and 'treatment credit' in s['debts']:
+        return (
+            (
+                'Pell leaves the account book open. “You owe a shift, not your'
+                ' health. Wash and restock here to clear the treatment credit'
+                ' without pay: repay pell. Or take the paid route with help'
+                ' pell and leave the account for another day. Your choice.”'
             ),
             False,
         )
@@ -1205,6 +1221,26 @@ class Ledger(entity_component.ContextComponent):
           True,
       )
     if verb == 'repay':
+      if target == 'pell' and location == 'clinic':
+        if 'treatment credit' not in s['debts']:
+          return (
+              (
+                  'Pell checks the book. No treatment shift is owed; paid work'
+                  ' remains available.'
+              ),
+              False,
+          )
+        s['debts'].remove('treatment credit')
+        s['trust']['pell'] += 1
+        return (
+            (
+                'You wash the instruments and restock the linen cupboard. Pell'
+                ' draws a line through the treatment credit. No wages change'
+                ' hands; your next route can be paid. This clears care owed,'
+                ' not any harm from a circulated photograph.'
+            ),
+            True,
+        )
       debt = 'Mutual repayment: $35 after confidentiality breach'
       if target == 'mutual' and location == 'mutual' and debt in s['debts']:
         if s['cash'] < 35:
@@ -1254,6 +1290,7 @@ class Ledger(entity_component.ContextComponent):
       if location not in ('office', 'clinic', 'cafe'):
         return 'Find the office, café or clinic to recover safely.', False
       cost = 3 if location == 'clinic' else 1
+      care_on_credit = s['cash'] < cost
       if s['cash'] >= cost:
         s['cash'] -= cost
       elif 'treatment credit' not in s['debts']:
@@ -1264,6 +1301,13 @@ class Ledger(entity_component.ContextComponent):
           (
               'A meal, dry socks, a few hours without questions. Injury and'
               ' heat each fall by one. Leads remain available when you return.'
+              + (
+                  ' Care taken on credit can be settled with one unpaid clinic'
+                  ' shift (repay pell at the clinic). Paid work remains'
+                  ' available.'
+                  if care_on_credit
+                  else ''
+              )
           ),
           True,
       )
@@ -1538,7 +1582,7 @@ def intent_options(ledger):
       'deliver': 'physically deliver the cold medicine',
       'copy': 'photograph or duplicate owned document pages for safekeeping',
       'barter': 'offer collateral or a guarantee in exchange to',
-      'repay': 'pay back the confidentiality debt to',
+      'repay': 'settle an existing obligation to',
       'restitution': (
           'pay Iona’s twelve-dollar compensation to displaced families'
       ),
@@ -1586,6 +1630,7 @@ def parse_intent(text, model, ledger):
       | set(c.EVIDENCE)
       | set(c.JOBS)
       | {
+          'rent',
           'affidavit',
           'families',
           'self',

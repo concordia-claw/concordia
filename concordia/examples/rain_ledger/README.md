@@ -61,7 +61,10 @@ Looking and ordinary conversation are free. Travel, work, risk and waiting
 commit fictional time. Every eight commitments the office charges up to $3;
 unpaid upkeep becomes an obligation. Injury blocks force and high heat blocks
 covert entry; meals, rest and clinical work offer recovery. There is no death
-screen or compulsory main-case ending. Institution-level outcomes coexist:
+screen or compulsory main-case ending. If care was taken on credit, Pell offers
+an unpaid clinic shift (`repay pell`) to clear it. Paid clinic work remains
+available while the debt is outstanding; repayment does not erase other harm.
+Deferred office rent can be repaid at the office (`repay rent`). Institution-level outcomes coexist:
 a demolition stay cannot be overwritten by a later private payment.
 
 Three residents have independent standard Asynchronous loops. Each can act at
@@ -205,3 +208,15 @@ Standard minimal prefabs supply memory/context, generic.Simulation supplies
 composition/checkpoints, ReactiveMeasurements and AsyncLogCollector supply logs,
 StepController supplies boundaries, and HumanSession/its unchanged browser JS
 supply input and reconnect. No engine files or provider defaults are changed.
+
+
+For a separately authorized stronger-model review, `live_review` accepts
+`--backend together_ai --model deepseek-ai/DeepSeek-V4.1-Flash --max-calls 24`.
+It uses the standard factory with an inherited protected `TOGETHER_API_KEY`
+(or standard `TOGETHER_AI_API_KEY`) and never stores credentials in artifacts.
+Use only an authorized protected egress path; there is no fallback provider or
+Codex authentication change. Adapter-internal retries mean the standard logical
+call limit is not an HTTP-request or monetary cap. Exhausting it invalidates a
+live-quality result. The `conversation` path adds held-out questions,
+hypotheticals, refusal and multi-action probes; its real-model result is pending.
+Every such run is an actual engine launch and requires the workspace launch gate.
