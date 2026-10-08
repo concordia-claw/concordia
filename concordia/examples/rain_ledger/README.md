@@ -244,3 +244,7 @@ walking away remains possible. This branch has offline rule evidence only.
 Evidence obtained covertly or by force now records disputed custody. Witnessed
 authentication can restore credibility without erasing heat or the acquisition
 record; independent corroboration is an alternative to returning to the holder.
+
+`organise families` in the Narrows lets the investigator verify a voluntary
+block representative. This costs an action, not cash, and shares Nessa’s
+three-block cap. It is available even after refusing Ada’s case.

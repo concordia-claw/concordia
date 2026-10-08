@@ -47,6 +47,32 @@ _FOLLOWUP = _DISCLOSURE_OPENING + [
 ]
 
 PATHS = {
+    'tenant_organiser': [
+        'refuse case',
+        'go cafe',
+        'go clinic',
+        'go narrows',
+        'organise families',
+        'organise families',
+        'go clinic',
+        'go cafe',
+        'go office',
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon bargain',
+        'go press',
+        'publish records',
+        'go mutual',
+        'settle relief',
+        'settle relief accept',
+        'settle families',
+        'go records',
+        'go office',
+        'go cafe',
+        'talk nessa',
+    ],
     'acquisition_authenticate': [
         'go records',
         'investigate permit',

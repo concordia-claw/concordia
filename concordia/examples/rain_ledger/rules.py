@@ -42,6 +42,7 @@ VERBS = (
     'refuse',
     'wait',
     'help',
+    'organise',
     'threaten',
     'apologize',
     'deliver',
@@ -251,6 +252,8 @@ class Ledger(entity_component.ContextComponent):
         choices.append('repay pell')
     if s['location'] == 'office' and 'office rent' in s['debts']:
       choices.append('repay rent')
+    if s['location'] == 'narrows' and s['petition'] < 3:
+      choices.append('organise families')
     if s['location'] == 'mutual' and s['stayed'] and not s['settlement']:
       choices.append('settle relief')
     return choices + ['look', 'rest']
@@ -600,7 +603,8 @@ class Ledger(entity_component.ContextComponent):
             ' instead of relocation bonds. Families retain their claims.'
             f" Representatives: {s['petition']}/2 required. Review settle"
             ' relief'
-            ' at Mutual; you need not accept. Nessa continues organising.',
+            ' at Mutual; you need not accept. Help verify representatives with'
+            ' organise families in the Narrows, or leave Nessa to organise.',
             False,
         )
       if target == 'nessa' and location == 'cafe' and s['relocation']:
@@ -1720,6 +1724,38 @@ class Ledger(entity_component.ContextComponent):
           ),
           True,
       )
+    if verb == 'organise':
+      if target != 'families' or location != 'narrows':
+        return 'Meet the tenants in the Narrows to organise families.', False
+      if method != 'careful':
+        return (
+            (
+                'Representatives must volunteer; money or threats cannot'
+                ' certify consent.'
+            ),
+            False,
+        )
+      if s['petition'] >= 3:
+        return (
+            (
+                'All three blocks have verified representatives. Their petition'
+                ' stands; there are no extra signatures to manufacture.'
+            ),
+            False,
+        )
+      s['petition'] += 1
+      announcement = (
+          'The tenants post their verified block representative'
+          f" ({s['petition']}/3). Two representatives can administer emergency"
+          ' relief after a stay.'
+      )
+      s['news'].append(announcement)
+      return (
+          'You spend the afternoon checking addresses at kitchen tables.'
+          ' One block chooses its own representative; you witness the register.'
+          ' No money changes hands and nobody waives a claim. '
+          + announcement
+      ), True
     if verb == 'help':
       if target == 'pell' and location == 'clinic':
         if s['photo_exposed']:
@@ -1996,6 +2032,9 @@ def intent_options(ledger):
       'refuse': 'decline or return the commission',
       'wait': 'let fictional time pass',
       'help': 'do relief or clinic work for',
+      'organise': (
+          'spend an action verifying a volunteer block representative for'
+      ),
       'threaten': 'intimidate or coerce',
       'apologize': 'ask forgiveness from',
       'deliver': 'physically deliver the cold medicine',

@@ -501,6 +501,35 @@ class ResidentPolicyTest(unittest.TestCase):
 
 class ReliefAgreementTest(unittest.TestCase):
 
+  def test_player_can_organise_after_refusing_case_without_cash_or_npc_wait(
+      self,
+  ):
+    ledger = rules.Ledger()
+    for command in ('refuse case', 'go cafe', 'go clinic', 'go narrows'):
+      act(ledger, command)
+    ledger.state['cash'] = 0
+    self.assertIn('organise families', ledger.available())
+    for _ in range(2):
+      act(ledger, 'organise families')
+    self.assertEqual(ledger.public()['petition'], 2)
+    self.assertEqual(ledger.public()['case'], 'declined')
+    self.assertEqual(ledger.public()['cash'], 0)
+    ledger.npc_resolve('Nessa Rook', 'organise', '')
+    before = ledger.public()
+    self.assertIn('All three', act(ledger, 'organise families'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertNotIn('organise families', ledger.available())
+    self.assertNotIn('organise', ledger.resident_moves('Nessa Rook'))
+    self.assertEqual(ledger.public()['petition'], 3)
+
+  def test_organising_requires_volunteers_and_correct_location(self):
+    ledger = rules.Ledger()
+    self.assertIn('Narrows', act(ledger, 'organise families'))
+    ledger.state['location'] = 'narrows'
+    self.assertIn('volunteer', act(ledger, 'organise families force'))
+    self.assertEqual(ledger.public()['petition'], 0)
+    self.assertEqual(ledger.public()['turn'], 0)
+
   def ready(self):
     ledger = rules.Ledger()
     for command in (
