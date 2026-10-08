@@ -60,6 +60,7 @@ PATHS = {
             ' bond, keeping my original safe.'
         ),
         'settle families',
+        'settle families accept',
         'go press',
         'publish named',
         'go docks',

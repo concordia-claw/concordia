@@ -254,8 +254,17 @@ class Ledger(entity_component.ContextComponent):
       choices.append('repay rent')
     if s['location'] == 'narrows' and s['petition'] < 3:
       choices.append('organise families')
-    if s['location'] == 'mutual' and s['stayed'] and not s['settlement']:
-      choices.append('settle relief')
+    if s['location'] == 'mutual' and not s['settlement']:
+      choices += ['settle families', 'settle self']
+      if s['stayed']:
+        choices.append('settle relief')
+      previous = s['last_intent'] or {}
+      if (
+          previous.get('verb') == 'settle'
+          and previous.get('target') in ('families', 'relief')
+          and previous.get('method') == 'careful'
+      ):
+        choices.append(f"settle {previous['target']} accept")
     return choices + ['look', 'rest']
 
   def _record(self, actor, attempt, result, before, *, visible=False):
@@ -1571,11 +1580,20 @@ class Ledger(entity_component.ContextComponent):
           if 'secured copy pledged for Mutual relocation audit' in s['promises']
           else 2
       )
-      if location != 'mutual' or len(s['evidence']) < required:
+      case = self._publication_case('named')
+      if (
+          location != 'mutual'
+          or case['independent'] < required
+          or case['credibility'] < required * 2
+      ):
         return (
             (
-                'Holt needs two pieces of evidence and a meeting at Mutual'
-                ' before he can commit company money.'
+                'Holt needs two pieces of independently sourced, credible'
+                ' evidence and a meeting at Mutual; a pledged credible'
+                ' duplicate lowers the requirement to one. Repeated accounts'
+                ' from the same source do not corroborate each other.'
+                ' Authenticate disputed custody, bring independent'
+                ' corroboration, or pledge a credible copy.'
             ),
             False,
         )
@@ -1605,6 +1623,20 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      if target == 'families' and method != 'accept':
+        return (
+            'Written terms: relocation bonds for families who choose to leave;'
+            ' nobody is evicted by this agreement. No confidentiality clause or'
+            ' claim waiver. This uses the company allocation: the six-evening'
+            ' relief agreement will no longer be available, even after a stay.'
+            + (
+                ' The organised petition also earns you a documented $5 fee.'
+                if s['petition'] >= 2
+                else ' There is no personal fee.'
+            )
+            + ' Use settle families accept to sign, review settle relief after'
+            ' a public stay, or walk away.'
+        ), False
       s['settlement'] = target
       if target == 'families':
         s['relocation'] = True
@@ -1615,9 +1647,9 @@ class Ledger(entity_component.ContextComponent):
         s['trust']['nessa'] += 2
         return (
             (
-                'Holt signs relocation bonds, not a confession. Nessa has money'
-                ' and no neighbourhood. You retain the papers; publication'
-                ' remains possible.'
+                'Holt signs relocation bonds, not a confession. Families can'
+                ' choose to leave; the emergency-relief allocation is spent.'
+                ' You retain the papers; publication remains possible.'
             ),
             True,
         )
@@ -1980,6 +2012,7 @@ def intent_options(ledger):
     commands += [
         'barter holt',
         'settle families',
+        'settle families accept',
         'settle self',
         'repay mutual',
     ]
@@ -2077,7 +2110,12 @@ def intent_options(ledger):
               ' material if held'
           ),
       }[target]
-    if len(words) > 2:
+    if verb == 'settle' and target == 'families' and method == 'accept':
+      label += (
+          '; sign optional relocation bonds; permanently forgo company'
+          ' emergency relief; retain claims and papers'
+      )
+    elif len(words) > 2:
       label += {
           'pay': '; pay $4 for evidence or $5 for tools',
           'stealth': '; covert entry risks heat',

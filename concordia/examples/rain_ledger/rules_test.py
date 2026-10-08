@@ -460,6 +460,38 @@ class ResidentPolicyTest(unittest.TestCase):
     self.assertEqual(ledger.public()['cash'], 27)
     self.assertNotIn('cold medicine', ledger.public()['inventory'])
 
+  def test_settlement_needs_corroboration_not_duplicate_witness_accounts(self):
+    ledger = rules.Ledger()
+    ledger.state['location'] = 'mutual'
+    ledger.state['evidence'] = {
+        key: dict(content.EVIDENCE[key]) for key in ('testimony', 'ledger')
+    }
+    self.assertIn('same source', act(ledger, 'settle families accept'))
+    self.assertEqual(ledger.public()['settlement'], '')
+    self.assertEqual(ledger.public()['turn'], 0)
+    ledger.state['evidence']['permit'] = dict(content.EVIDENCE['permit'])
+    act(ledger, 'settle families accept')
+    self.assertTrue(ledger.public()['relocation'])
+
+  def test_covert_bargain_needs_authentication_or_more_corroboration(self):
+    ledger = rules.Ledger()
+    for command in (
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon stealth',
+    ):
+      act(ledger, command)
+    before = ledger.public()
+    self.assertIn('Authenticate', act(ledger, 'settle families accept'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    act(ledger, 'authenticate carbon bargain')
+    self.assertIn('Written terms', act(ledger, 'settle families'))
+    self.assertEqual(ledger.public()['settlement'], '')
+    act(ledger, 'settle families accept')
+    self.assertTrue(ledger.public()['relocation'])
+
   def test_public_invitation_does_not_make_copy_collateral_redundant(self):
     ledger = rules.Ledger()
     act(ledger, 'go records')
@@ -474,7 +506,7 @@ class ResidentPolicyTest(unittest.TestCase):
         'go records',
         'go mutual',
         'barter holt',
-        'settle families',
+        'settle families accept',
     ):
       act(ledger, command)
     self.assertTrue(ledger.public()['relocation'])
@@ -490,7 +522,7 @@ class ResidentPolicyTest(unittest.TestCase):
         'go records',
         'go mutual',
         'barter holt',
-        'settle families',
+        'settle families accept',
     ):
       act(ledger, command)
     self.assertTrue(ledger.public()['relocation'])
@@ -588,7 +620,11 @@ class ReliefAgreementTest(unittest.TestCase):
   def test_review_can_be_refused_for_relocation(self):
     ledger = self.ready()
     act(ledger, 'settle relief')
-    act(ledger, 'settle families')
+    self.assertNotIn('settle families accept', ledger.available())
+    self.assertIn('six-evening', act(ledger, 'settle families'))
+    self.assertIn('settle families accept', ledger.available())
+    self.assertEqual(ledger.public()['settlement'], '')
+    act(ledger, 'settle families accept')
     self.assertTrue(ledger.public()['relocation'])
     self.assertEqual(ledger.public()['relief'], 0)
     self.assertIn('already committed', act(ledger, 'settle relief accept'))

@@ -248,3 +248,9 @@ record; independent corroboration is an alternative to returning to the holder.
 `organise families` in the Narrows lets the investigator verify a voluntary
 block representative. This costs an action, not cash, and shares Nessa’s
 three-block cap. It is available even after refusing Ada’s case.
+
+Company agreements consume one allocation. `settle families` reviews relocation
+terms; `settle families accept` signs. The review exposes the alternative forgone
+and any organising fee. Signing requires independently sourced credible proof
+or the established secured-copy pledge; duplicate witness accounts are not
+corroboration. No agreement transfers or destroys your evidence.

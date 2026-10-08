@@ -326,6 +326,7 @@ PATHS = {
         'go mutual',
         'barter holt',
         'settle families',
+        'settle families accept',
         'go press',
         'publish named',
     ],
