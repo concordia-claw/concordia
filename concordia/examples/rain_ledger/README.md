@@ -7,7 +7,7 @@ fraud. You can refuse her sister's request, make a living, take a compromise,
 protect a witness, publish a case, or return after doing something you regret.
 
 This is an evolving example, not a claim of parity with a commercial RPG.
-Its supported actions have explicit, inspectable consequences; a local model
+Its supported actions have explicit, inspectable consequences; a language model
 interprets ordinary language and chooses resident agendas. It does not grant
 arbitrary invented powers or treat generated prose as authoritative state.
 
@@ -23,25 +23,38 @@ The existing `project-editor-engines-and-games` launcher was inspected; this
 example composes the same standard async engine directly because it has human
 input and scenario state, rather than adding another generic editor launcher.
 
-Use a Python3.12+ environment with Concordia and the optional Ollama, FastAPI and
-uvicorn dependencies already installed. From the repository root:
+Use a Python3.12+ environment with Concordia and the optional Together, FastAPI
+and uvicorn dependencies installed. The player runner uses the standard Concordia
+Together adapter. Its protected host environment must supply the credential;
+never place it in command arguments or save files. From the repository root:
 
 ```sh
 python -m concordia.examples.rain_ledger.run \
-  --output runs/my-rain-ledger --model qwen3:8b --no-think \
+  --output runs/my-rain-ledger --model deepseek-ai/DeepSeek-V4.1-Flash \
   --port 8795 --editor-port 8796
 ```
 
-This explicit command uses the installed 8B model used in the later real playtests.
-The runner default remains llama3.2:3b (3B class); neither model is downloaded.
-The model must already exist in local Ollama. There is no paid fallback, model
-download, credential change or global configuration change. Requests have a
-60-second timeout and180-token output cap. Human input itself makes no model
-call until submitted. Bindings are loopback-only. A trusted tailnet reverse proxy
+The client is explicitly scoped to `https://api.together.xyz/v1`, with TLS
+verification enabled and SDK retries disabled. Missing credentials fail before
+creating the game or listeners. There is no local-model fallback. Model calls
+are paid; earlier evaluation dollar costs were not captured, so do not infer
+remaining budget from logical call counts. Human input makes no model call until
+submitted. Bindings are loopback-only. A trusted private tailnet reverse proxy
 may expose **the player port only**; allow its hostname with `--allowed-host`.
+For a subpath on an existing private HTTPS endpoint, add
+`--root-path /rain-ledger` and use the public path `/rain-ledger/` with its
+trailing slash. The standard web adapter supports a proxy that strips or preserves
+the prefix; relative assets and API calls stay within that path. Keep unrelated
+handlers, including the endpoint's root UI, unchanged.
 Never expose the developer listener: it includes full simulation state.
+Use `--resume` only with the intended isolated save. The historical Ollama
+adapter dependencies above describe the branch ancestry, not the player build.
 
 ## Play
+
+Settlement review never signs a contract: repeat `settle self` to reread Holt’s
+consultancy terms; use `settle self accept` to sign after review. Natural-language
+interpretations still require confirmation, and Cancel discards the proposal.
 
 The opening and casebook explain the immediate situation. Write one attempt in
 your own words, or edit a suggestion before submitting. Exact shorthand also
@@ -211,10 +224,11 @@ python -m unittest concordia.examples.rain_ledger.rules_test -v
 python -m concordia.examples.rain_ledger.design_probe --output runs/design-review
 ```
 
-`smoke` launches the actual Asynchronous engine. Its default model is explicitly
-scripted; `--live --model qwen3:8b --no-think` uses the tested installed local
-model with a40-logical-call cap (the adapter can retry a choice internally). Follow the
-workspace's simulation-launch acknowledgement procedure before running it.
+`smoke` launches the actual Asynchronous engine with a scripted default model.
+It is not an offline rule test. Disclose the exact command, cwd, and purpose
+before any simulation; no acknowledgement is required. Historical local-model
+review commands are not the supported Together player path. Offline tests do
+not establish model dialogue quality or physical Android usability.
 
 All game-specific mechanics live in Ledger, a standard ContextComponent;
 PortAuthority extends standard SwitchAct hooks; FixedActionSpec/Constant retain standard routing contracts. ResidentAct extends standard ConcatActComponent choice sampling, adding explicit no-effect provider-failure reporting.

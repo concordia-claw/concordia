@@ -117,3 +117,145 @@ Next: duplicated Saye material currently adds credibility despite sharing one so
 ### Corroboration — stronger evidence, not repeated accounts
 Before-bargain trace runs/corroboration-review-20261008/before-bargain.json: Ada account1 + covert Iona ledger1 + Holt carbon2 reached credibility4 even though the first two are the same source family. An earlier all-covert probe correctly failed and remains archived as before.json. Redesign uses the strongest item per family for both publication and existing negotiation checks. All possessed pages still survive; Vera explains the assessment. A weak ledger can be printed but does not alone justify an asserted finding of inflated premiums; the supported finding follows credible documents.
 After traces runs/family-recovery-20261008: both initially fail freely. Independent public permit enables records-only publication while keeping Saye pages private (cash12/turn16). Protecting Iona and obtaining witnessed authentication instead supports named publication (cash12/turn20). Routes trade time, privacy and cooperation rather than forcing a single clue order.50offline rule tests,scoped types/lint/format/diff pass. No additional model calls for this mechanical replay.
+
+
+### Held-out creditor review027 — mechanics pass, dialogue failure
+Actual Together runs/return-work-027 used18logicalcalls (44total across025–027; USD not captured). End state: cash42/turn17,maincase declined,debts cleared,two medicine deliveries. First intentions only3/4: accepting the tools guarantee was classified unclear, then reviewer corrected job tools bargain. Silas claimed earlier delivery covered the new guarantee; Pell refused an available follow-up consignment. This is NOT an overall success despite the archived driver’s passed:true field. Prior evidence is preserved. Future driver now reports mechanics_passed/semantics_passed separately and requires both for passed/exit success.
+
+Root cause: the action description omitted that accepting the guarantee and promising future delivery form one agreement; character prompts/rulings supplied opening dialogue without current creditor facts. Dirty edits now describe the future obligation, author the new order being sent to Pell, give correct outstanding/carried/discharged rulings, and record open barter/repayment as witnessed events at the local workplace. No private-conversation broadcast added.
+
+Offline four-stage probe: runs/creditor-offline-20261008/transaction-order-probe.py and transaction-order-final.json. Uses Ledger/PortAuthority, standard get_state/set_state and mocked empty speech, no engine/provider. Ordinary delivery: turn6/$27/no debt. New tools guarantee: turn10/$36/separate debt. Pickup: turn14/$36/debt still owed. Later delivery: turn16/$42/debt cleared, main case declined. The no-debt statement before acceptance was correct. A separate proved prompt flaw was falsely describing an already-sent order before any guarantee and giving Silas unrelated clinic job status (before-scope.json). Corrected context conditionally includes the actual accepted order, exposes only each speaker’s own job register, and retains the shared guarantee status. Focused tests cover all four stages, scope and local witnessing. This validates supplied facts/authored responses, NOT generated dialogue after correction; no further paid call made.
+
+### Android host handoff
+Prepared isolated runs/android-demo-20261008-a/ledger.json atturn0/$18/emptyhistory using standard Ledger state. RainSession now gives an untouched restored save its original opening; played saves retain return presentation.52rule tests and scopedtypes/lint/format/diff/JSsyntax pass. Exact parent-only launch and sourcehashes in runs/fork-continuation-20261008/ANDROID-LAUNCH-REQUEST.txt and android-source-hashes.json. Worker did not launch any server/simulation or change Serve/routes. Parent reports existing10002->8795 and no listener. verify-android-host.py reuses prior narrowviewport harness and adds suggestion/draft/reload checks without submitting an action. It has NOT been run against the new host listener. Physical Android remains unverified.
+
+Next priorities: parent host delivery/HTTP/tailnet/mobile evidence; then validate corrected creditor speech with a bounded strong-model replay only when spend review permits. Wider open-ended narrative remains a work in progress.
+
+### Native recovery: refusal must not impersonate completed work (2026-10-09)
+
+Offline transcript `runs/fork-continuation-20261008/declined-tools-before.json`:
+`go docks → job tools → refuse tools → talk silas` produced “Every wrench is
+back. The tally is open to you.” State was `complete:declined`, trust 0, no
+union guarantee. This is a proved dialogue/affordance defect, separate from the
+correct pre-acceptance no-debt fact in the earlier creditor probe. The broad
+`complete:` check conflated rejection and successful service.
+
+Ledger now acknowledges the rejected commission and offers paid/covert access.
+A focused replay verifies that free access stays closed, no debt appears, and
+paying $4 still yields the manifest. This preserves refusal as a viable route
+without inventing earned goodwill. 56 rules/entrypoint tests pass; model speech
+was not evaluated. The held-out rain-027 result remains only 3/4 semantic first
+tries, with erroneous creditor speech, not an overall win.
+
+Player configuration recovery also removes the stale Qwen launch instructions.
+The Together-only entrypoint uses the standard adapter and protected xyz client;
+mocked startup checks establish wiring, not live access or Android usability.
+Next design target: clarity of pending proposals and reconnect on mobile, while
+preserving the player's draft and avoiding accidental commitments.
+
+### Android-first onboarding clarification (2026-10-09)
+
+Source-path review found that suggestions fill an editable draft, but sending
+exact shorthand commits immediately while natural-language interpretations wait
+for confirmation. Only the hidden Guide explained the distinction. The composer
+now states it directly, including Confirm/Cancel behavior, and associates that
+help with the input for assistive reading. The work list also called both refused
+and completed commissions SETTLED; it now distinguishes DECLINED and COMPLETED,
+with owed follow-up orders retaining their separate label. These are presentation
+corrections, not changes to action parsing or standard reconnect transport.
+
+56 offline tests pass and JS syntax checks pass. Actual first-time mobile
+comprehension remains untested. The coordinator has a single host procedure and
+read-only browser check covering both local and tailnet origins; neither was
+executed by the network-disabled worker. No Android link or provider access is
+claimed. Next evaluate first-action comprehension and real generated responses
+once protected host delivery exists; preserve the clean human save.
+
+### Completed work should leave a useful record (2026-10-09)
+
+Offline real-rule sequence `go cafe → go clinic → job medicine → go narrows →
+deliver medicine` left `complete:delivered`, but RainSession.snapshot still
+advertised “Carry cold medicine… Offered fee $9.” See job-board-before.json in
+the fork continuation directory. The outcome label alone did not tell a returning
+player what had changed or where ongoing work remained available.
+
+Extended the existing JOB_PROGRESS content map with outcome-specific descriptions
+for completed and declined jobs: paid delivery and ongoing clinic work, the union
+promise, declined commission/paid tally alternative, and lasting photograph harm.
+No new component or engine logic. Replay now gives paid-delivery aftermath and
+`help pell`; accepting a new guarantee correctly replaces that with a new order
+still owed. Two regression tests cover these transitions and tools refusal.
+58 rules/entrypoint tests pass. This is offline state/presentation evidence, not
+new model speech or human usability evidence. Changes are not loaded into the
+coordinator's running host; preserve its clean save and process while diagnosing
+tailnet TLS. Physical Android and tailnet HTTPS remain unverified.
+
+### A receipt must not invent an earlier promise (attempt23)
+
+The ordinary medicine path's authored receipt always said “your union guarantee
+is discharged,” even before accepting tools work. Archived before-state/response:
+`runs/fork-continuation-20261008/ordinary-delivery-before.json`. Debt state was
+correct; narration invented a transaction. This offers a possible source of
+confusing later character responses, but the held-out model failure's causal
+origin has not been established.
+
+Ledger now uses pre-delivery debt presence to select ordinary commission or
+union-discharge wording. A regression replays ordinary delivery → new guarantee
+→ later crew delivery, checking both receipts and debt state. 59 offline tests
+pass. No live replay, host restart or engine change; updated source awaits a
+future coordinator rollout. Tailnet TLS remains separately blocked, with no
+verified phone URL and no available evidence identifying the TLS root cause.
+
+### Return scenes should acknowledge consequences (attempt24)
+
+Earlier review noted that the Narrows still showed only surveyor crosses after
+a stay. An offline restored-state fixture with stay, signed relief and six
+evenings of supplies confirmed identical opening arrival text; evidence:
+`runs/fork-continuation-20261008/narrows-return-before.json`.
+
+Ledger._place_description now supplies the same state-grounded description for
+arrival and look: stay beside the remaining crosses, voluntary relocation when
+funded, tenant relief administration, recorded supplies and frozen claims. It
+keeps limits visible: temporary supplies do not promise permanent housing;
+relocation alone does not imply a stay. No new effects, actor knowledge or engine
+code. Two contrasting presentation regressions pass; total61 offline tests.
+The replay is a fixture, not an earned full campaign or model-quality test.
+After evidence is archived separately. Current live host remains unchanged;
+phone TLS access is still unverified and separately checkpointed.
+
+### Phone access before further narrative expansion
+
+User-reported black screen contrasts with a complete no-submit390x844 localhost
+opening. Historical authorized-device evidence favors443 reachability. Prepare
+standard root_path support rather than changing the game's rendering blindly.
+62 offline tests include both proxy prefix styles, canonical slash redirect and
+all page-linked assets/state/journal without any submitted action. No actual
+phone/path verification yet. Canonical /rain-ledger/ keeps relative navigation
+inside the game while preserving OpenClawroot. The pristine save is unchanged;
+standard draft storage naturally uses the new pathname, with no automatic draft
+migration or transport rewrite. Existing aftermath/receipt regressions pass.
+Next human-facing review remains actual phone access and first-move clarity;
+offline route tests do not establish either live TLS or gameplay quality.
+
+### Repeated negotiation must not become a signature (2026-10-11)
+
+Actual offline path through Records/Mutual obtained permit/carbon and repeated
+`settle self`. First invocation reviewed; second signed a$35 confidentiality
+contract. The semantic label conflated negotiate and accept. Evidence lives in
+`runs/fork-continuation-20261008/contract-review-before-20261011.json`.
+
+Now review is repeatable and free. `settle self accept` signs after terms were
+seen, matching relocation/relief consent patterns. Natural-language labels name
+the binding payment, absence of family benefit and publication liability.
+A deliberately wrong mocked selection for a refusal still produces a proposal,
+not a signature; cancellation invalidates subsequent confirmation. This tests
+consequence containment, not model comprehension. Updated intended acceptance
+in existing offline/live drivers; archived past transcripts unchanged.
+
+63 tests pass, including default/prefixed ASGI checks without an engine. Existing
+rule paths replayed separately; opportunist payment, breach debt and public stay
+remain reachable. Formatting, lint-errors and types pass. The live deployment was
+not changed and paid semantic/voice evaluation remains gated by verified budget
+and protected route. Save schema2 is unchanged; old saves restore, but repeated
+`settle self` deliberately no longer signs. Future human documentation uses the
+explicit acceptance command.

@@ -176,9 +176,40 @@ class Ledger(entity_component.ContextComponent):
         if key not in ('npc_turns', 'agendas', 'witnessed')
     }
 
+  def _place_description(self, place, state):
+    """Describe visible aftermath using only established scenario state."""
+    description = c.PLACES[place][1]
+    if place != 'narrows':
+      return description
+    if state['stayed']:
+      description = (
+          'The red crosses remain on the doorframes, but a copy of the stay'
+          ' is pinned beside them. Demolition must wait for the inquiry;'
+          ' the children’s pencil marks have not been painted over.'
+      )
+    if state['relocation']:
+      description += (
+          ' Relocation bonds are available for families who choose to leave.'
+          ' A bond is an option, not an order to pack.'
+      )
+    if state['settlement'] == 'relief':
+      description += (
+          ' The tenant representatives keep the signed supply agreement at'
+          ' the shelter. It buys time here, not permanent housing.'
+      )
+    if state['relief']:
+      description += (
+          f" The shelter book records supplies for {state['relief']}"
+          ' evening(s).'
+      )
+    if state['published']:
+      description += ' The claims remain frozen while the inquiry proceeds.'
+    return description
+
   def view(self):
     s = self.public()
-    place, description, exits = c.PLACES[s['location']]
+    place, _, exits = c.PLACES[s['location']]
+    description = self._place_description(s['location'], s)
     clues = (
         '\n'.join(
             f"• {key}: {e['text']} [{e['source']}; credibility"
@@ -267,7 +298,7 @@ class Ledger(entity_component.ContextComponent):
       previous = s['last_intent'] or {}
       if (
           previous.get('verb') == 'settle'
-          and previous.get('target') in ('families', 'relief')
+          and previous.get('target') in ('families', 'relief', 'self')
           and previous.get('method') == 'careful'
       ):
         choices.append(f"settle {previous['target']} accept")
@@ -398,6 +429,8 @@ class Ledger(entity_component.ContextComponent):
               'help',
               'deliver',
               'authenticate',
+              'barter',
+              'repay',
           )
           and method != 'stealth',
       )
@@ -565,7 +598,7 @@ class Ledger(entity_component.ContextComponent):
             False,
         )
       s['location'] = target
-      return c.PLACES[target][1], True
+      return self._place_description(target, s), True
     if verb == 'refuse':
       if target in c.JOBS:
         if s['jobs'].get(target) not in ('decision', 'carrying'):
@@ -763,6 +796,46 @@ class Ledger(entity_component.ContextComponent):
             ' repair work. I can trust you with a case again. The family still'
             ' has to live with that picture.” Paid work and treatment are'
             ' available; the photograph remains circulated.'
+        ), False
+      if target == 'silas' and s['jobs'].get('tools') == 'complete:declined':
+        s['known_leads'] = list(dict.fromkeys(s['known_leads'] + ['manifest']))
+        return (
+            'Silas leaves the tool register open. “You passed on the job. Fair'
+            ' enough. The tally still costs four dollars.” You can pay for'
+            ' certified access or attempt a covert copy; no crew delivery has'
+            ' been promised.'
+        ), False
+      if target == 'silas' and s['jobs'].get('tools', '').startswith(
+          'complete:'
+      ):
+        s['known_leads'] = list(dict.fromkeys(s['known_leads'] + ['manifest']))
+        return (
+            'Silas closes the tool register. “Every wrench is back. The tally'
+            ' is open to you.” '
+            + (
+                'The union guarantee still requires a later medicine delivery.'
+                ' Silas has sent the new crew order to Pell; an earlier'
+                ' delivery does not settle this promise.'
+                if 'union guarantee: carry medicine for the crew' in s['debts']
+                else 'No crew delivery is owed under a union guarantee.'
+            )
+        ), False
+      if (
+          target == 'pell'
+          and 'union guarantee: carry medicine for the crew' in s['debts']
+      ):
+        return (
+            'Pell opens the crew order Silas sent. '
+            + (
+                '“You already have this consignment. Take the sealed case to'
+                ' the Narrows; I pay on the receipt.”'
+                if s['jobs'].get('medicine') == 'carrying'
+                else (
+                    '“This is a new delivery against the union guarantee.'
+                    ' Earlier work stays paid. Ask for job medicine; nine'
+                    ' dollars when the Narrows nurse signs.”'
+                )
+            )
         ), False
       if target == 'pell' and 'treatment credit' in s['debts']:
         return (
@@ -1271,6 +1344,12 @@ class Ledger(entity_component.ContextComponent):
         result = (
             'Silas checks every wrench before he pays. “You can ask about that'
             ' early shipment now.”'
+            + (
+                ' He sends Pell a new crew order. You owe a later medicine'
+                ' delivery; earlier deliveries do not settle this guarantee.'
+                if method == 'bargain'
+                else ''
+            )
         )
       elif target == 'photograph':
         if method == 'sell':
@@ -1320,13 +1399,20 @@ class Ledger(entity_component.ContextComponent):
         s['trust']['pell'] += 1
       s['relief'] += 1
       debt = 'union guarantee: carry medicine for the crew'
-      if debt in s['debts']:
+      guarantee_owed = debt in s['debts']
+      if guarantee_owed:
         s['debts'].remove(debt)
       return (
-          (
-              'At the shelter you count the ampoules with the nurse. She signs'
-              ' the receipt and pays nine. The crew’s families receive their'
-              ' doses; your union guarantee is discharged.'
+          'At the shelter you count the ampoules with the nurse. She signs'
+          ' the receipt and pays nine. '
+          + (
+              'The crew’s families receive their doses; your union guarantee'
+              ' is discharged.'
+              if guarantee_owed
+              else (
+                  'The families receive their doses. Pell’s commission is'
+                  ' complete.'
+              )
           ),
           True,
       )
@@ -1662,15 +1748,17 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
-      if target == 'self' and not s['retainer_terms_seen']:
+      if target == 'self' and (
+          method != 'accept' or not s['retainer_terms_seen']
+      ):
         s['retainer_terms_seen'] = True
         return (
             (
                 'Holt puts the terms in writing: $35 for consultancy, no money'
                 ' for families, and a confidentiality clause. Publishing'
                 ' afterwards creates a $35 repayment obligation and legal heat.'
-                ' You keep the evidence. Repeat settle self to sign, or demand'
-                ' settle families instead.'
+                ' You keep the evidence. Use settle self accept to sign, or'
+                ' demand settle families instead.'
             ),
             False,
         )
@@ -2065,6 +2153,7 @@ def intent_options(ledger):
         'settle families',
         'settle families accept',
         'settle self',
+        'settle self accept',
         'repay mutual',
     ]
   if location == 'mutual' and s['stayed'] and not s['settlement']:
@@ -2157,7 +2246,17 @@ def intent_options(ledger):
               ' material if held'
           ),
       }[target]
-    if verb == 'settle' and target == 'families' and method == 'accept':
+    if verb == 'settle' and target == 'self':
+      label = f'{command} — ' + (
+          'sign the $35 personal consultancy and confidentiality clause;'
+          ' no family payment; later publication owes $35 and legal heat'
+          if method == 'accept'
+          else (
+              'review the personal consultancy terms only; no signature,'
+              ' payment or confidentiality commitment'
+          )
+      )
+    elif verb == 'settle' and target == 'families' and method == 'accept':
       label += (
           '; sign optional relocation bonds; permanently forgo company'
           ' emergency relief; retain claims and papers'
@@ -2176,6 +2275,16 @@ def intent_options(ledger):
               ' evidence'
           ),
       }[method]
+    if verb == 'job' and target == 'tools' and method == 'bargain':
+      label += (
+          '; accept a union guarantee and owe a later crew medicine delivery as'
+          ' one agreement, including if an earlier delivery is complete'
+      )
+    if verb == 'barter' and target == 'silas':
+      label += (
+          '; accept the tools guarantee with its future crew medicine delivery'
+          ' obligation'
+      )
     if verb == 'investigate' and method in ('stealth', 'force'):
       label += (
           '; acquired pages have unverified custody (credibility1);'

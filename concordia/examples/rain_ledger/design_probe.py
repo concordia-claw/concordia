@@ -351,7 +351,7 @@ PATHS = {
         'job photograph sell',
         'investigate carbon bargain',
         'settle self',
-        'settle self',
+        'settle self accept',
         'go press',
         'publish named',
         'go mutual',

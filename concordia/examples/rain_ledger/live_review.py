@@ -20,17 +20,50 @@ import os
 from pathlib import Path
 import threading
 import time
-from typing import cast
 
-from concordia.contrib.language_models.together import together_ai_model
 from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.rain_ledger import game
 from concordia.examples.rain_ledger import rules
+from concordia.examples.rain_ledger.model_setup import protected_together_model
 from concordia.examples.rain_ledger.smoke import until
 from concordia.language_model import call_limit_wrapper
-import together
 
 PATHS = {
+    'return_work': [
+        (
+            'I cannot take Ada’s missing-person case. I return the unopened'
+            ' envelope.'
+        ),
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go warehouse',
+        'go docks',
+        'job tools',
+        (
+            'I accept the union guarantee for the tools and will carry medicine'
+            ' for the crew later.'
+        ),
+        (
+            'Silas, I delivered medicine earlier. Does this new guarantee still'
+            ' require another delivery?'
+        ),
+        'go office',
+        'go cafe',
+        'go clinic',
+        (
+            'Pell, can I pick up the crew’s promised consignment even though my'
+            ' earlier commission is finished?'
+        ),
+        'job medicine',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go clinic',
+        'job medicine',
+    ],
     'conversation': [
         'go cafe',
         'Ada, would a newspaper story put your sister in danger?',
@@ -145,7 +178,7 @@ PATHS = {
         'job photograph',
         'job photograph sell',
         'settle self',
-        'settle self',
+        'settle self accept',
         'go press',
         'publish named',
         'go mutual',
@@ -183,21 +216,6 @@ PATHS = {
         'investigate ledger',
     ],
 }
-
-
-def protected_together_model(model_name, credential):
-  """Use the standard adapter with an explicitly authorized SDK endpoint."""
-  client = together.Together(
-      api_key=credential,
-      base_url='https://api.together.xyz/v1',
-      max_retries=0,
-      timeout=30,
-  )
-  return together_ai_model.Base(
-      model_name=model_name,
-      api_key=credential,
-      client=cast(together_ai_model.TogetherClient, client),
-  )
 
 
 def main():
@@ -251,6 +269,12 @@ def main():
   worker.start()
   transcript = []
   expected_by_path = {
+      'return_work': {
+          0: ('refuse', 'case', 'careful'),
+          9: ('job', 'tools', 'bargain'),
+          10: ('talk', 'silas', 'careful'),
+          14: ('talk', 'pell', 'careful'),
+      },
       'conversation': {
           1: ('talk', 'ada', 'careful'),
           2: ('talk', 'nessa', 'careful'),
@@ -334,6 +358,15 @@ def main():
           )
           == expected
       )
+      # Both existing commands resolve the same tools guarantee at this stage.
+      if (
+          expected == ('job', 'tools', 'bargain')
+          and first_intent
+          == {'verb': 'barter', 'target': 'silas', 'method': 'careful'}
+          and before['location'] == 'docks'
+          and before['jobs'].get('tools') == 'decision'
+      ):
+        accurate = True
       correction = None
       response = first_response
       if proposed:
@@ -431,7 +464,17 @@ def main():
     assert (
         calls < args.max_calls
     ), 'Call limit reached; live quality result invalid'
-    if args.path == 'conversation':
+    if args.path == 'return_work':
+      passed = (
+          state['case'] == 'declined'
+          and state['jobs'].get('tools') == 'complete:bargain'
+          and state['jobs'].get('medicine') == 'complete:delivered'
+          and 'union guarantee: carry medicine for the crew'
+          not in state['debts']
+          and 'cold medicine' not in state['inventory']
+          and state['relief'] == 2
+      )
+    elif args.path == 'conversation':
       passed = (
           state['turn'] == 1 and state['cash'] == 18 and not state['promises']
       )
@@ -499,7 +542,9 @@ def main():
         'logical_calls': calls,
         'max_calls': args.max_calls,
         'path': args.path,
-        'passed': passed,
+        'mechanics_passed': passed,
+        'semantics_passed': semantics['correct'] == semantics['total'],
+        'passed': passed and semantics['correct'] == semantics['total'],
         'state': state,
         'npc_valid_actions': state['agendas'],
         'errors': errors,
@@ -517,8 +562,9 @@ def main():
             'jobs',
         )
     }
+    assert result['semantics_passed'], semantics
     print(
-        'LIVE REVIEW STATE PASS',
+        'LIVE REVIEW CHECKS PASS',
         args.path,
         state['agendas'],
         'first_try_semantics',

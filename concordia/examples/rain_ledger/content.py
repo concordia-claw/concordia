@@ -279,25 +279,62 @@ JOB_METHODS = {
 }
 JOB_PROGRESS = {
     'tools': {
+        'complete:declined': (
+            'You declined the commission; no fee or union guarantee was earned.'
+            ' Silas still offers paid access to the tally at the docks.'
+        ),
+        'complete:pay': 'You paid to recover the tools and collected the fee.',
+        'complete:bargain': (
+            'The tools were recovered against a crew medicine guarantee.'
+            ' Check obligations for any delivery still owed.'
+        ),
+        'complete:stealth': (
+            'You recovered the tools by theft and collected the fee.'
+            ' Silas now trusts you with the tally.'
+        ),
+        'complete:force': (
+            'You forced the cage and returned the tools for the fee.'
+            ' The violence remains part of your record.'
+        ),
         'decision': (
             'The tools are in the pawn cage. At the docks, pay $5, pledge a'
             ' later medicine delivery, or risk theft/force. You can also refuse'
             ' the job.'
-        )
+        ),
     },
     'photograph': {
+        'complete:declined': (
+            'You declined to sell or warn; no fee was collected and the'
+            ' photograph was not circulated by you.'
+        ),
+        'complete:sell': (
+            'You sold the photograph. Its exposure of the patient’s family'
+            ' remains, even if you repair your working relationship with Pell.'
+        ),
+        'complete:warn': (
+            'You warned the family and accepted the smaller fee, keeping'
+            ' their visit out of circulation.'
+        ),
         'decision': (
             'The visitor is a patient’s relative seeking medicine. At Mutual,'
             ' sell the photograph for $20, warn the family for $4, or refuse'
             ' without a fee. Nothing has been circulated yet.'
-        )
+        ),
     },
     'medicine': {
+        'complete:declined': (
+            'You returned the sealed case to Pell without a fee.'
+            ' For other paid clinic work, ask with help pell.'
+        ),
+        'complete:delivered': (
+            'The Narrows nurse signed for this consignment; its fee is paid.'
+            ' For ongoing paid clinic work, ask with help pell.'
+        ),
         'carrying': (
             'The sealed cold case is with you. Deliver medicine in the Narrows'
             ' for $9, or return it to Pell at the clinic to decline. Reading or'
             ' disconnecting does not spoil it.'
-        )
+        ),
     },
 }
 

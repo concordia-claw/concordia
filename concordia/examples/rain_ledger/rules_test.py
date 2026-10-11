@@ -15,6 +15,7 @@
 """Rule contract checks only: no engines, servers or language models run here."""
 
 import unittest
+import importlib.util
 from concordia.examples.rain_ledger import content, game, rules
 from concordia.typing import entity as entity_lib
 from concordia.language_model import no_language_model
@@ -40,7 +41,7 @@ class ProtectedReviewTest(unittest.TestCase):
   ):
     from concordia.examples.rain_ledger import live_review
 
-    with mock.patch.object(live_review.together, 'Together') as client:
+    with mock.patch('together.Together') as client:
       model = live_review.protected_together_model(
           'deepseek-ai/DeepSeek-V4.1-Flash', 'test-placeholder'
       )
@@ -52,7 +53,85 @@ class ProtectedReviewTest(unittest.TestCase):
     self.assertNotIn('verify', client.call_args.kwargs)
 
 
+class NeighbourhoodSceneTest(unittest.TestCase):
+
+  def test_return_after_relief_shows_both_gain_and_remaining_problem(self):
+    ledger = rules.Ledger()
+    # Restored aftermath fixture; testing presentation, not earning the outcome.
+    ledger.state.update(
+        location='clinic',
+        stayed=True,
+        published=True,
+        settlement='relief',
+        relief=6,
+    )
+    arrival = act(ledger, 'go narrows')
+    self.assertIn('copy of the stay', arrival)
+    self.assertIn('not permanent housing', arrival)
+    self.assertIn('6 evening(s)', arrival)
+    self.assertIn('claims remain frozen', arrival)
+    self.assertIn(arrival, ledger.view())
+    self.assertNotIn('Relocation bonds', arrival)
+
+  def test_relocation_does_not_invent_a_stay_or_forced_departure(self):
+    ledger = rules.Ledger()
+    ledger.state.update(location='clinic', relocation=True)
+    arrival = act(ledger, 'go narrows')
+    self.assertIn('Surveyors have chalked red crosses', arrival)
+    self.assertIn('families who choose to leave', arrival)
+    self.assertNotIn('copy of the stay', arrival)
+    self.assertNotIn('signed supply agreement', arrival)
+
+
+class JobBoardAftermathTest(unittest.TestCase):
+
+  def test_paid_delivery_board_records_aftermath_then_new_obligation(self):
+    ledger = rules.Ledger()
+    for command in (
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+    ):
+      act(ledger, command)
+    session = game.RainSession(ledger)
+    board = session.snapshot()['jobs']['medicine']
+    self.assertIn('fee is paid', board['description'])
+    self.assertNotIn('Offered fee', board['description'])
+    self.assertIn('help pell', board['description'])
+    for command in ('go warehouse', 'go docks', 'job tools', 'barter silas'):
+      act(ledger, command)
+    board = session.snapshot()['jobs']['medicine']
+    self.assertTrue(board['followup'])
+    self.assertIn('guarantee is still owed', board['description'])
+
+  def test_declined_tools_board_does_not_offer_completed_commission_again(self):
+    ledger = rules.Ledger()
+    for command in ('go docks', 'job tools', 'refuse tools'):
+      act(ledger, command)
+    board = game.RainSession(ledger).snapshot()['jobs']['tools']
+    self.assertIn('declined', board['description'])
+    self.assertIn('paid access', board['description'])
+    self.assertNotIn('Offered fee', board['description'])
+
+
 class ConversationPresentationTest(unittest.TestCase):
+
+  def test_declined_tools_do_not_receive_completed_work_dialogue(self):
+    ledger = rules.Ledger()
+    for command in ('go docks', 'job tools', 'refuse tools'):
+      act(ledger, command)
+    response = act(ledger, 'talk silas')
+    self.assertIn('You passed on the job', response)
+    self.assertNotIn('Every wrench is back', response)
+    self.assertEqual(ledger.public()['trust']['silas'], 0)
+    self.assertFalse(ledger.public()['debts'])
+    self.assertIn('keeps the tally closed', act(ledger, 'investigate manifest'))
+    cash = ledger.public()['cash']
+    act(ledger, 'investigate manifest pay')
+    self.assertEqual(ledger.public()['cash'], cash - 4)
+    self.assertIn('manifest', ledger.public()['evidence'])
 
   def test_repeated_ruling_is_not_replayed_before_each_spoken_answer(self):
     ledger = rules.Ledger()
@@ -94,6 +173,101 @@ class ConversationPresentationTest(unittest.TestCase):
     self.assertNotIn('countersigned', record['local_facts'])
     self.assertNotIn('counter-ledger', record['local_facts'])
     self.assertEqual(ledger.public()['cash'], 18)
+
+
+class CreditorKnowledgeTest(unittest.TestCase):
+
+  def test_delivery_receipt_only_discharges_an_accepted_guarantee(self):
+    ledger = rules.Ledger()
+    for command in ('go cafe', 'go clinic', 'job medicine', 'go narrows'):
+      act(ledger, command)
+    receipt = act(ledger, 'deliver medicine')
+    self.assertNotIn('guarantee', receipt)
+    self.assertIn('commission is complete', receipt)
+    self.assertFalse(ledger.public()['debts'])
+    for command in (
+        'go warehouse',
+        'go docks',
+        'job tools',
+        'barter silas',
+        'go office',
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+    ):
+      act(ledger, command)
+    self.assertIn(
+        'union guarantee: carry medicine for the crew', ledger.public()['debts']
+    )
+    receipt = act(ledger, 'deliver medicine')
+    self.assertIn('union guarantee is discharged', receipt)
+    self.assertFalse(ledger.public()['debts'])
+
+  def facts(self, ledger, contact):
+    clone = rules.Ledger()
+    clone.set_state(ledger.get_state())
+    clone.state['location'] = 'docks' if contact == 'silas' else 'clinic'
+    ruling = act(clone, 'talk ' + contact)
+    authority = game.PortAuthority(
+        clone,
+        mock.Mock(sample_text=mock.Mock(return_value='')),
+        game.RainSession(clone),
+    )
+    _, record = authority.dialogue(contact, 'What delivery do I owe?', ruling)
+    return ruling, record['local_facts']
+
+  def test_ordinary_then_guarantee_then_delivery_has_scoped_transaction_facts(
+      self,
+  ):
+    ledger = rules.Ledger()
+    for command in (
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+    ):
+      act(ledger, command)
+    _, facts = self.facts(ledger, 'silas')
+    self.assertIn('no crew order has been agreed', facts)
+    self.assertNotIn('Medicine job status', facts)
+    self.assertNotIn('order was sent', facts)
+    for command in ('go warehouse', 'go docks', 'job tools', 'barter silas'):
+      act(ledger, command)
+    self.assertIn(
+        'union guarantee: carry medicine for the crew', ledger.public()['debts']
+    )
+    for contact in ('silas', 'pell'):
+      ruling, facts = self.facts(ledger, contact)
+      self.assertIn('STILL OWED', facts)
+      self.assertIn('order was sent', facts)
+      self.assertIn('new', ruling.lower())
+    self.assertNotIn('Tools job status', self.facts(ledger, 'pell')[1])
+    self.assertTrue(
+        any(
+            'new crew order' in entry
+            for entry in ledger.get_state()['witnessed']['Silas Marr']
+        )
+    )
+    for command in ('go office', 'go cafe', 'go clinic', 'job medicine'):
+      act(ledger, command)
+    self.assertIn('already have', self.facts(ledger, 'pell')[0])
+    self.assertIn('STILL OWED', self.facts(ledger, 'silas')[1])
+    for command in ('go narrows', 'deliver medicine'):
+      act(ledger, command)
+    for contact in ('silas', 'pell'):
+      facts = self.facts(ledger, contact)[1]
+      self.assertIn('has been discharged', facts)
+      self.assertNotIn('STILL OWED', facts)
+
+  def test_prepared_untouched_save_gets_original_opening(self):
+    ledger = rules.Ledger()
+    session = game.RainSession(ledger, restored=True)
+    self.assertEqual(session.snapshot()['entries'][0]['text'], content.OPENING)
+    act(ledger, 'go cafe')
+    resumed = game.RainSession(ledger, restored=True)
+    self.assertIn('Returned', resumed.snapshot()['entries'][0]['text'])
 
 
 class ConsequencesTest(unittest.TestCase):
@@ -452,7 +626,7 @@ class ConsequencesTest(unittest.TestCase):
         'publish redacted',
         'go mutual',
         'settle self',
-        'settle self',
+        'settle self accept',
     ):
       act(ledger, action)
     self.assertTrue(ledger.public()['stayed'])
@@ -842,6 +1016,45 @@ class ReliefAgreementTest(unittest.TestCase):
 
 class RecoveryTest(unittest.TestCase):
 
+  def test_repeated_contract_review_never_signs_and_natural_accept_can_cancel(
+      self,
+  ):
+    ledger = rules.Ledger()
+    for command in (
+        'go records',
+        'investigate permit',
+        'go mutual',
+        'talk holt',
+        'investigate carbon bargain',
+    ):
+      act(ledger, command)
+    cash, turn = ledger.public()['cash'], ledger.public()['turn']
+    for _ in range(3):
+      self.assertIn('terms in writing', act(ledger, 'settle self'))
+      self.assertEqual(ledger.public()['cash'], cash)
+      self.assertEqual(ledger.public()['turn'], turn)
+      self.assertFalse(ledger.public()['settlement'])
+      self.assertNotIn(
+          'Mutual confidentiality clause', ledger.public()['promises']
+      )
+    self.assertIn('settle self accept', ledger.available())
+    model = mock.Mock()
+    model.sample_choice.return_value = (0, 'settle self accept', {})
+    # Deliberately wrong model choice: this tests review safety, not semantics.
+    attempt = 'Remind me what Holt is offering; I am not signing.'
+    intent = rules.parse_intent(attempt, model, ledger)
+    proposal = ledger.resolve(intent, attempt)
+    self.assertIn('sign the $35', proposal)
+    self.assertIn('later publication owes $35', proposal)
+    self.assertEqual(ledger.public()['cash'], cash)
+    self.assertFalse(ledger.public()['settlement'])
+    act(ledger, 'cancel')
+    act(ledger, 'confirm')
+    self.assertFalse(ledger.public()['settlement'])
+    act(ledger, 'settle self accept')
+    self.assertEqual(ledger.public()['settlement'], 'self')
+    self.assertIn('Mutual confidentiality clause', ledger.public()['promises'])
+
   def test_confidentiality_terms_precede_acceptance_and_breach_is_repayable(
       self,
   ):
@@ -857,7 +1070,7 @@ class RecoveryTest(unittest.TestCase):
     cash = ledger.public()['cash']
     self.assertIn('terms in writing', act(ledger, 'settle self'))
     self.assertEqual(ledger.public()['cash'], cash)
-    act(ledger, 'settle self')
+    act(ledger, 'settle self accept')
     act(ledger, 'go press')
     act(ledger, 'publish named')
     self.assertIn(

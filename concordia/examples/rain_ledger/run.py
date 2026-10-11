@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run the original Rain Ledger using local Ollama and existing human transport."""
+"""Run the original Rain Ledger using Together and existing human transport."""
 
 import argparse
 import pathlib
 
-from concordia.contrib.language_models.ollama import ollama_model
 from concordia.examples.astral_canticle import web
 from concordia.examples.rain_ledger import game
+from concordia.examples.rain_ledger import model_setup
 from concordia.examples.rain_ledger import rules
 from fastapi.responses import FileResponse
 import uvicorn
@@ -29,12 +29,7 @@ def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--port', type=int, default=8795)
   parser.add_argument('--editor-port', type=int, default=8796)
-  parser.add_argument('--model', default='llama3.2:3b')
-  parser.add_argument(
-      '--no-think',
-      action='store_true',
-      help='Disable thinking for a supported local model, per request only.',
-  )
+  parser.add_argument('--model', default=model_setup.DEFAULT_MODEL)
   parser.add_argument('--output', type=pathlib.Path, required=True)
   parser.add_argument(
       '--resume',
@@ -47,22 +42,25 @@ def main():
       help='Restore a standard checkpoint into a NEW output directory.',
   )
   parser.add_argument('--allowed-host', action='append', default=[])
+  parser.add_argument(
+      '--root-path',
+      default='',
+      help=(
+          'Player reverse-proxy prefix, for example /rain-ledger (default: /).'
+      ),
+  )
   args = parser.parse_args()
+  args.root_path = args.root_path.rstrip('/')
+  if args.root_path and not args.root_path.startswith('/'):
+    parser.error('--root-path must start with /')
   if (args.output / 'ledger.json').exists() and not args.resume:
     parser.error(
         'Existing save: choose --resume explicitly or a fresh output directory.'
     )
-  model = ollama_model.OllamaLanguageModel(
-      args.model,
-      think=False if args.no_think else None,
-      request_timeout=60,
-      max_output_tokens=180,
-      response_format=None,
-      system_message=(
-          'Follow the requested format. Choose only a supplied option when'
-          ' asked to choose.'
-      ),
-  )
+  try:
+    model = model_setup.protected_together_model(args.model)
+  except ValueError as error:
+    parser.error(str(error))
   instance = game.Game(
       model,
       args.output,
@@ -73,6 +71,7 @@ def main():
   app = web.create_app(
       instance.session,
       runner=instance.play,
+      root_path=args.root_path,
       static_path=pathlib.Path(__file__).with_name('static'),
       journal_title='THE RAIN LEDGER',
       journal_filename='rain-ledger.txt',

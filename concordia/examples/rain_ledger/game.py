@@ -64,7 +64,10 @@ class RainSession(human_io.HumanSession):
     self.ledger = ledger
     self.pause_after = False
     self.controller: step_controller.StepController | None = None
-    if not restored:
+    initial_state = ledger.public()
+    if not restored or (
+        initial_state['turn'] == 0 and not initial_state['history']
+    ):
       self.add_observation(c.OPENING)
     else:
       self.add_observation(
@@ -145,8 +148,8 @@ class ResidentAct(concat_act_component.ConcatActComponent):
           {'actor': self.name, 'provider_failure': type(exc).__name__}
       )
       self.session.add_observation(
-          f'Local model unavailable for {self.name}; no resident consequence'
-          ' was invented.'
+          f'Character response unavailable for {self.name}; no resident'
+          ' consequence was invented.'
       )
       return 'wait'
 
@@ -252,7 +255,7 @@ class PortAuthority(switch_act.SwitchAct):
         self._logging_channel({'provider_failure': type(exc).__name__})
         intent = {}
         self.session.add_observation(
-            'Local interpretation is unavailable. No time or resources were'
+            'Interpretation is unavailable. No time or resources were'
             ' spent; exact shorthand remains available.'
         )
       confirmed = (
@@ -279,8 +282,7 @@ class PortAuthority(switch_act.SwitchAct):
         except Exception as exc:
           self._logging_channel({'dialogue_failure': type(exc).__name__})
           result += (
-              '\nLocal dialogue unavailable; the recorded response above'
-              ' stands.'
+              '\nDialogue unavailable; the recorded response above stands.'
           )
       self.session.add_observation(result)
     else:
@@ -313,6 +315,49 @@ class PortAuthority(switch_act.SwitchAct):
       local_facts += (
           f" Open shelter beds: {state['shelter_beds']}; verified"
           f" block representatives: {state['petition']}."
+      )
+    if contact in ('silas', 'pell'):
+      guarantee_owed = (
+          'union guarantee: carry medicine for the crew' in state['debts']
+      )
+      guarantee_accepted = state['jobs'].get('tools') == 'complete:bargain'
+      if guarantee_accepted or guarantee_owed:
+        local_facts += (
+            ' The crew order was sent by Silas to Pell when the guarantee was'
+            ' accepted.'
+            + (
+                ' A later crew medicine delivery is STILL OWED; earlier'
+                ' unrelated work does not settle it.'
+                if guarantee_owed
+                else (
+                    ' The crew guarantee has been discharged by its later'
+                    ' delivery.'
+                )
+            )
+        )
+      else:
+        local_facts += (
+            ' No union-guarantee delivery is currently owed; no crew order has'
+            ' been agreed.'
+        )
+      if contact == 'silas':
+        local_facts += (
+            f" Tools job status: {state['jobs'].get('tools', 'not accepted')}."
+        )
+      else:
+        local_facts += (
+            ' Medicine job status:'
+            f" {state['jobs'].get('medicine', 'not accepted')}."
+        )
+    if (
+        contact == 'pell'
+        and 'union guarantee: carry medicine for the crew' in state['debts']
+    ):
+      local_facts += (
+          ' Unless the binding ruling refuses new work because of unrepaired'
+          ' privacy harm, you can issue a NEW consignment even after an earlier'
+          ' commission finished. An already-issued case must be delivered, not'
+          ' issued twice.'
       )
     repeated = any(entry['result'] == ruling for entry in state['history'][:-1])
     text = self.model.sample_text(
