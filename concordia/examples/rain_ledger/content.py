@@ -245,6 +245,13 @@ EVIDENCE_METHODS = {
 }
 
 JOBS: dict[str, JobSpec] = {
+    'hearing': {
+        'place': 'docks',
+        'pay': 0,
+        'description': (
+            'Bring the clinic delivery receipts to a public claims appeal.'
+        ),
+    },
     'tools': {
         'place': 'docks',
         'pay': 12,
@@ -273,11 +280,34 @@ JOBS: dict[str, JobSpec] = {
 }
 # These become visible only after the investigator has inspected the job.
 JOB_METHODS = {
+    'hearing': ('pay', 'bargain'),
     'tools': ('pay', 'bargain', 'stealth', 'force'),
     'photograph': ('sell', 'warn'),
     'medicine': ('careful',),
 }
 JOB_PROGRESS = {
+    'hearing': {
+        'decision': (
+            'Pell’s signed delivery receipt supports a narrow clinic appeal.'
+            ' Pay $6 for transport, or spend two union support on volunteer'
+            ' transport. Either releases two evenings of clinic supplies, pays'
+            ' you nothing and leaves other claims frozen. Choose job hearing'
+            ' pay or bargain; refuse hearing declines without paying for'
+            ' transport.'
+        ),
+        'complete:pay': (
+            'You funded the clinic appeal. Its supply claim was released; other'
+            ' claims remain frozen.'
+        ),
+        'complete:bargain': (
+            'The crews funded the clinic appeal with two union support. Its'
+            ' supply claim was released; other claims remain frozen.'
+        ),
+        'complete:declined': (
+            'You declined the clinic appeal. No resources were spent and no'
+            ' claim was released.'
+        ),
+    },
     'tools': {
         'complete:declined': (
             'You declined the commission; no fee or union guarantee was earned.'

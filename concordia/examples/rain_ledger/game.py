@@ -48,6 +48,10 @@ from concordia.utils import structured_logging
 from concordia.environment import step_controller
 
 PUBLIC_JOBS = {
+    'hearing': (
+        'Clinic claims appeal: ask Silas about transport after your delivered'
+        ' medicine and a public stay.'
+    ),
     'tools': 'Recover a crew’s pawned tools. Offered fee $12.',
     'photograph': (
         'Photograph a councillor’s midnight visitor. Offered fee $20.'
@@ -126,6 +130,7 @@ class RainSession(human_io.HumanSession):
                 ),
             }
             for key, value in c.JOBS.items()
+            if self.ledger.job_visible(key, player_state)
         },
         pause_after=self.pause_after,
     )
@@ -343,6 +348,12 @@ class PortAuthority(switch_act.SwitchAct):
       if contact == 'silas':
         local_facts += (
             f" Tools job status: {state['jobs'].get('tools', 'not accepted')}."
+            + (
+                ' Clinic appeal you arranged: '
+                + c.JOB_PROGRESS['hearing'][state['jobs']['hearing']]
+                if state['jobs'].get('hearing')
+                else ''
+            )
         )
       else:
         local_facts += (

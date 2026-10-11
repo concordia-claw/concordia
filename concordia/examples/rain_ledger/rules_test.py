@@ -53,6 +53,125 @@ class ProtectedReviewTest(unittest.TestCase):
     self.assertNotIn('verify', client.call_args.kwargs)
 
 
+class ClinicAppealTest(unittest.TestCase):
+
+  def late_game(self):
+    ledger = rules.Ledger()
+    for command in (
+        'refuse case',
+        'go records',
+        'investigate permit',
+        'go office',
+        'go docks',
+        'talk silas',
+        'investigate manifest pay',
+        'go press',
+        'publish records',
+        'go docks',
+        'go office',
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go warehouse',
+        'go docks',
+    ):
+      act(ledger, command)
+    return ledger
+
+  def test_not_offered_early_and_inspection_is_repeatable(self):
+    early = rules.Ledger()
+    self.assertNotIn('hearing', game.RainSession(early).snapshot()['jobs'])
+    act(early, 'go docks')
+    act(early, 'job hearing pay')
+    self.assertNotIn('hearing', early.public()['jobs'])
+    ledger = self.late_game()
+    self.assertIn('job hearing', ledger.available())
+    before = ledger.public()
+    for _ in range(2):
+      self.assertIn('Pay $6', act(ledger, 'job hearing'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertEqual(ledger.public()['cash'], before['cash'])
+    act(ledger, 'refuse hearing')
+    self.assertEqual(ledger.public()['jobs']['hearing'], 'complete:declined')
+    self.assertEqual(ledger.public()['relief'], before['relief'])
+    self.assertNotIn('job hearing', ledger.available())
+
+  def test_union_transport_reopens_resident_work_and_cannot_repeat_reward(self):
+    ledger = self.late_game()
+    for _ in range(3):
+      act(ledger, 'wait')
+      ledger.npc_resolve('Silas Marr', 'petition', '')
+    self.assertNotIn('petition', ledger.resident_moves('Silas Marr'))
+    act(ledger, 'job hearing')
+    before = ledger.public()
+    act(ledger, 'job hearing bargain')
+    self.assertEqual(ledger.public()['union_support'], 1)
+    self.assertIn('petition', ledger.resident_moves('Silas Marr'))
+    self.assertEqual(ledger.public()['relief'], before['relief'] + 2)
+    self.assertFalse(ledger.public()['source_exposed'])
+    restored = rules.Ledger()
+    restored.set_state(ledger.get_state())
+    after = restored.public()
+    self.assertIn('settled', act(restored, 'job hearing bargain'))
+    self.assertEqual(restored.public()['relief'], after['relief'])
+    self.assertEqual(restored.public()['turn'], after['turn'])
+    self.assertIn(
+        'clinic supply claim was released', restored.public()['neighbourhood']
+    )
+
+  def test_receipt_before_publication_also_unlocks_and_announces_appeal(self):
+    ledger = rules.Ledger()
+    for command in (
+        'go cafe',
+        'go clinic',
+        'job medicine',
+        'go narrows',
+        'deliver medicine',
+        'go cafe',
+        'go office',
+        'go records',
+        'investigate permit',
+        'go office',
+        'go docks',
+        'talk silas',
+        'investigate manifest pay',
+        'go press',
+    ):
+      act(ledger, command)
+    self.assertIn('job hearing', act(ledger, 'publish records'))
+    act(ledger, 'go docks')
+    act(ledger, 'job hearing')
+    model = mock.Mock()
+    model.sample_choice.return_value = (0, 'job hearing pay', {})
+    before = ledger.public()
+    intent = rules.parse_intent(
+        'I will cover the transport myself.', model, ledger
+    )
+    ledger.resolve(intent, 'I will cover the transport myself.')
+    self.assertEqual(ledger.public()['cash'], before['cash'])
+    act(ledger, 'cancel')
+    self.assertEqual(ledger.public()['jobs']['hearing'], 'decision')
+    self.assertIn('Pay $6', act(ledger, 'talk silas'))
+
+  def test_failed_union_option_keeps_paid_alternative_open(self):
+    ledger = self.late_game()
+    act(ledger, 'job hearing')
+    before = ledger.public()
+    self.assertIn('Two union support', act(ledger, 'job hearing bargain'))
+    self.assertEqual(ledger.public()['turn'], before['turn'])
+    self.assertEqual(ledger.public()['jobs']['hearing'], 'decision')
+    response = act(ledger, 'job hearing pay')
+    self.assertIn('You pay $6', response)
+    # Transport can coincide with ordinary eight-action upkeep.
+    upkeep = 3 if ledger.public()['turn'] % 8 == 0 else 0
+    self.assertEqual(ledger.public()['cash'], before['cash'] - 6 - upkeep)
+    self.assertEqual(ledger.public()['relief'], before['relief'] + 2)
+    self.assertEqual(ledger.public()['union_support'], 0)
+    self.assertTrue(ledger.public()['stayed'])
+
+
 class NeighbourhoodSceneTest(unittest.TestCase):
 
   def test_return_after_relief_shows_both_gain_and_remaining_problem(self):

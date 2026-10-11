@@ -259,3 +259,41 @@ not changed and paid semantic/voice evaluation remains gated by verified budget
 and protected route. Save schema2 is unchanged; old saves restore, but repeated
 `settle self` deliberately no longer signs. Future human documentation uses the
 explicit acceptance command.
+
+### Clinic appeal: an optional continuation of a limited public victory
+
+2026-10-11 audit: `runs/hearing-continuation-20261011/reachable-before.json`
+records an actual rule path that refused Ada's commission, obtained the public
+permit/tally, published a stay, delivered medicine, then exercised resident
+choices. Nessa and Holt exhausted their local work; Silas still had guard.
+The docks offered the old tools commission but no response to frozen clinic
+claims. This was a shallow aftermath, not total world inactivity. The initial
+`before.json` is retained as a failed audit: it omitted talk silas, so no tally
+or stay was earned. Only the corrected reachable trace supports the finding.
+
+Design: link the existing signed medicine receipt to the public inquiry through
+one optional clinic appeal. No Iona discovery, tools completion, settlement or
+forced quest chain required. Reuse Ledger jobs, cash, union_support, relief,
+news, persistent component state, and standard resident opportunity scheduling.
+No new resource counter, save-schema key, engine, transport or logging system.
+Free inspection explains $6 transport versus two union support and no personal
+fee. Refusal leaves claims untouched. Insufficient union support preserves the
+paid alternative. Completion releases two evenings of supplies once; it does
+not settle other claims or erase witness/privacy/settlement consequences.
+Using the union spends the same support available for guard intervention and
+reopens Silas's existing petition action, giving him a reason to act again.
+
+Second design pass addressed discoverability and returning conversation: both
+publication/delivery orders announce job hearing when it unlocks; the work board
+hides it beforehand. Silas recalls reviewed/resolved terms, and only his scoped
+speech facts receive that job's details. No generated voice quality is claimed.
+
+Paid, union-funded and refusal traces branch from the reachable audit in
+`pay-after.json`, `bargain-after.json`, `decline-after.json`; each restores with
+identical state. Four new focused tests cover early gating, repeated free review,
+refusal, insufficient support, paid alternative, resource tradeoff, regained
+resident affordance, one-shot completion, reversed unlock order and cancellation
+of a natural payment proposal. 67 tests pass; types0errors/4existing suppressions,
+scoped lint and diff checks clean. These are rules/ASGI/mocked-provider checks,
+not an actual engine or human/model playtest. The city remains finite; this is
+one substantive continuation, not a claim of an indefinitely reactive campaign.

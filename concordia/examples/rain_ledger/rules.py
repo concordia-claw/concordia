@@ -235,6 +235,16 @@ class Ledger(entity_component.ContextComponent):
         + '\n'.join(s['news'][-3:])
     )
 
+  def job_visible(self, key, state):
+    return (
+        key != 'hearing'
+        or bool(state['jobs'].get(key))
+        or (
+            state['stayed']
+            and state['jobs'].get('medicine') == 'complete:delivered'
+        )
+    )
+
   def available(self):
     s = self.public()
     choices = ['confirm', 'cancel'] if s.get('proposal') else []
@@ -262,6 +272,7 @@ class Ledger(entity_component.ContextComponent):
         f'job {key}'
         for key, value in c.JOBS.items()
         if value['place'] == s['location']
+        and self.job_visible(key, s)
         and (
             not s['jobs'].get(key, '').startswith('complete:')
             or (
@@ -567,6 +578,11 @@ class Ledger(entity_component.ContextComponent):
       )
     if s['published']:
       parts.append('Claims frozen during inquiry; relief is needed.')
+    if s['jobs'].get('hearing') in ('complete:pay', 'complete:bargain'):
+      parts.append(
+          'The clinic supply claim was released on appeal; other claims remain'
+          ' frozen.'
+      )
     if s['relief']:
       parts.append(f"Shelter supplied for {s['relief']} evening(s).")
     s['neighbourhood'] = ' '.join(parts)
@@ -797,6 +813,8 @@ class Ledger(entity_component.ContextComponent):
             ' has to live with that picture.” Paid work and treatment are'
             ' available; the photograph remains circulated.'
         ), False
+      if target == 'silas' and s['jobs'].get('hearing'):
+        return c.JOB_PROGRESS['hearing'][s['jobs']['hearing']], False
       if target == 'silas' and s['jobs'].get('tools') == 'complete:declined':
         s['known_leads'] = list(dict.fromkeys(s['known_leads'] + ['manifest']))
         return (
@@ -1257,6 +1275,58 @@ class Ledger(entity_component.ContextComponent):
             ),
             False,
         )
+      if target == 'hearing':
+        if not self.job_visible(target, s):
+          return (
+              (
+                  'A clinic appeal needs a public stay and your signed medicine'
+                  ' delivery receipt.'
+              ),
+              False,
+          )
+        if not status:
+          s['jobs'][target] = 'decision'
+          return c.JOB_PROGRESS[target]['decision'], False
+        if method not in ('pay', 'bargain'):
+          return c.JOB_PROGRESS[target]['decision'], False
+        if method == 'pay':
+          if s['cash'] < 6:
+            return (
+                (
+                    'Transport costs $6. Review the union option or leave the'
+                    ' appeal open.'
+                ),
+                False,
+            )
+          s['cash'] -= 6
+        else:
+          if s['union_support'] < 2:
+            return (
+                (
+                    'Two union support are needed for volunteer transport.'
+                    ' Silas can build support; paid transport remains an'
+                    ' alternative.'
+                ),
+                False,
+            )
+          s['union_support'] -= 2
+        s['jobs'][target] = 'complete:' + method
+        s['relief'] += 2
+        result = (
+            'The clinic receipt is read into the appeal record. Two evenings'
+            ' of clinic supplies are released, not a general compensation'
+            ' award. Other claims remain frozen; no witness names are sold.'
+            + (
+                ' You pay $6 for transport.'
+                if method == 'pay'
+                else (
+                    ' The crews spend two union support on transport; their'
+                    ' next petition needs rebuilding.'
+                )
+            )
+        )
+        s['news'].append(result)
+        return result, True
       if target == 'medicine':
         if method != 'careful':
           return (
@@ -1413,6 +1483,12 @@ class Ledger(entity_component.ContextComponent):
                   'The families receive their doses. Pell’s commission is'
                   ' complete.'
               )
+          )
+          + (
+              ' With the stay in force, the receipt supports a clinic claims'
+              ' appeal. Ask Silas at the docks: job hearing.'
+              if s['stayed'] and not s['jobs'].get('hearing')
+              else ''
           ),
           True,
       )
@@ -1664,7 +1740,14 @@ class Ledger(entity_component.ContextComponent):
               else ' Demolition stops.'
           )
           + ' The frozen claims leave a relief problem you can choose to help'
-          ' solve.',
+          ' solve.'
+          + (
+              ' Your signed medicine receipt supports a clinic appeal; ask'
+              ' Silas at the docks with job hearing.'
+              if s['jobs'].get('medicine') == 'complete:delivered'
+              and not s['jobs'].get('hearing')
+              else ''
+          ),
           True,
       )
     if verb == 'settle':
@@ -2246,7 +2329,22 @@ def intent_options(ledger):
               ' material if held'
           ),
       }[target]
-    if verb == 'settle' and target == 'self':
+    if verb == 'job' and target == 'hearing':
+      label = f'{command} — ' + (
+          'fund clinic appeal transport for $6; two evenings of supplies, no'
+          ' personal fee'
+          if method == 'pay'
+          else (
+              'spend two union support on clinic appeal transport; two evenings'
+              ' of supplies, no personal fee'
+          )
+          if method == 'bargain'
+          else (
+              'review clinic appeal transport choices without committing'
+              ' resources'
+          )
+      )
+    elif verb == 'settle' and target == 'self':
       label = f'{command} — ' + (
           'sign the $35 personal consultancy and confidentiality clause;'
           ' no family payment; later publication owes $35 and legal heat'

@@ -273,3 +273,11 @@ Returning to an inspected job rereads the decision without choosing it. The work
 board remembers learned complications after reconnect. If a tools guarantee is
 accepted after an earlier medicine job, Pell offers a new consignment until that
 guarantee is discharged; earlier receipts remain in the journal.
+
+A public stay plus your completed medicine delivery unlocks one optional clinic
+claims appeal at the docks (`job hearing`). Review it freely: transport costs
+$6 (`job hearing pay`) or two union support (`job hearing bargain`); refusal
+remains available. A successful appeal releases two evenings of clinic supplies,
+not every frozen claim, and pays no personal fee. Spending union support reduces
+what Silas can spend on guards and reopens his existing petition work. This is
+a bounded follow-up using existing state, not a new repeating income loop.
