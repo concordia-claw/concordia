@@ -324,3 +324,12 @@ negation and unsupported multi-action input, original prompt preservation,
 mandatory review/cancel, bounded retries and sanitized save/restore. They are
 not held-out model accuracy results. Real protected-Together replay and mobile
 review/cancel behavior remain pending; no user save or live service was changed.
+
+Recovery follow-through: a fake-client PortAuthority replay now covers failure,
+rephrased retry, fresh proposal, confirmation and repeated confirmation. The
+retry remains at office/turn0/$18 until confirmation, then reaches cafe/turn1/$18
+exactly once with only two fixture-provider requests. This addresses the next
+onboarding risk: accidentally treating recovery as consent or charging twice.
+All72 scenario tests pass. This is an offline control-flow replay, not a player
+or real-model success claim; next evidence needed is protected provider testing
+followed by authorized phone review/cancel and reconnect observation.

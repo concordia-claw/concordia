@@ -101,6 +101,38 @@ class InterpretationContractTest(unittest.TestCase):
     model.sample_choice.assert_not_called()
     self.assertNotIn('_needs_confirmation', intent)
 
+  def test_retry_after_failure_requires_fresh_review_and_commits_once(self):
+    ledger = rules.Ledger()
+    session = game.RainSession(ledger)
+    model, client = fake_model('"go cafe"')
+    client.chat.completions.create.side_effect = [
+        ValueError('fixture unavailable'),
+        client.chat.completions.create.return_value,
+    ]
+    authority = game.PortAuthority(ledger, model, session)
+    entity = mock.Mock()
+    entity.get_capture_key_for_thread.return_value = content.PLAYER
+    authority.set_entity(entity)
+
+    def submit(attempt):
+      ledger.pending[content.PLAYER] = attempt
+      return authority._resolve({}, None)
+
+    with self.assertLogs(level='WARNING'):
+      submit('Go to the cafe')
+    self.assertIsNone(ledger.public()['proposal'])
+    submit('Head over to the Lantern for a coffee.')
+    self.assertEqual(ledger.public()['location'], 'office')
+    self.assertEqual(ledger.public()['turn'], 0)
+    self.assertEqual(ledger.public()['proposal']['intent']['target'], 'cafe')
+    submit('confirm')
+    self.assertEqual(ledger.public()['location'], 'cafe')
+    self.assertEqual(ledger.public()['turn'], 1)
+    self.assertEqual(ledger.public()['cash'], 18)
+    submit('confirm')
+    self.assertEqual(ledger.public()['turn'], 1)
+    self.assertEqual(client.chat.completions.create.call_count, 2)
+
   def test_failure_is_single_sanitized_durable_event(self):
     for error, category in (
         (
