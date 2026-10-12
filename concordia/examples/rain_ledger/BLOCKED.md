@@ -33,3 +33,18 @@ without revealing it for implementation tuning. Reading its resulting evaluation
 retires that persona from future hold-out use; never tune against its transcript.
 A different held-out persona is needed for a later cycle. This is a protocol
 constraint, not a claim that an existing scripted path was held out.
+
+## Native browser execution
+
+2026-10-12 offline no-model renderer check attempted using existing Playwright
+Chromium with all requests routed to an in-process ASGI application. Browser
+exited before page creation: `bootstrap_check_in ... Permission denied (1100)`,
+`SIGTRAP`. No screenshot, UI pass or player action occurred.
+
+Alternative routes: (1) checked exposed tools for a browser execution capability;
+none applicable; (2) prepared the same intercepted no-server/no-model check for
+coordinator host execution. No permissions/sandbox flags changed, no download or
+connection to an existing browser/profile. Source and in-process checks remain
+useful but cannot replace real renderer evidence. Coordinator can run
+`runs/goal-20261012/test_browser_panels.py` with project PYTHONPATH; all network
+requests are intercepted and no game runner is installed in that test app.
