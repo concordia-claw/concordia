@@ -36,6 +36,7 @@ from concordia.environment import engine as engine_lib
 from concordia.examples.astral_canticle import human_io
 from concordia.examples.rain_ledger import content as c
 from concordia.examples.rain_ledger import rules
+from concordia.examples.rain_ledger import model_setup
 from concordia.prefabs.entity import minimal
 from concordia.prefabs.simulation import generic
 from concordia.typing import entity as entity_lib
@@ -252,23 +253,30 @@ class PortAuthority(switch_act.SwitchAct):
     if attempt is None:
       raise RuntimeError(f'No actor-scoped attempt for {actor}')
     dialogue_log = None
+    interpretation_failure = None
     if actor == c.PLAYER:
       try:
         intent = rules.parse_intent(attempt, self.model, self.ledger)
       except Exception as exc:
-        logging.exception('Player interpretation failed')
-        self._logging_channel({'provider_failure': type(exc).__name__})
-        intent = {}
-        self.session.add_observation(
-            'Interpretation is unavailable. No time or resources were'
-            ' spent; exact shorthand remains available.'
+        interpretation_failure = model_setup.interpretation_failure_category(
+            exc
         )
+        logging.warning(
+            'Player interpretation failed (%s)', interpretation_failure
+        )
+        intent = {}
       confirmed = (
           self.ledger.public().get('proposal')
           if intent.get('verb') == 'confirm'
           else None
       )
-      result = self.ledger.resolve(intent, attempt)
+      result = (
+          self.ledger.record_interpretation_failure(
+              attempt, interpretation_failure
+          )
+          if interpretation_failure
+          else self.ledger.resolve(intent, attempt)
+      )
       effective = confirmed['intent'] if confirmed else intent
       spoken_attempt = (
           confirmed.get('attempt', attempt) if confirmed else attempt
@@ -308,6 +316,7 @@ class PortAuthority(switch_act.SwitchAct):
         'ledger': self.ledger.get_state(),
         'interpretation': intent if actor == c.PLAYER else None,
         'dialogue': dialogue_log,
+        'interpretation_failure': interpretation_failure,
     })
     return result
 

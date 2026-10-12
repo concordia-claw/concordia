@@ -331,6 +331,22 @@ class Ledger(entity_component.ContextComponent):
     )
     return result
 
+  def record_interpretation_failure(self, attempt, category):
+    """Keep one recoverable failure and its safe category in the durable ledger."""
+    with self.lock:
+      before = copy.deepcopy(self.state)
+      self.state['proposal'] = None
+      result = self._record(
+          c.PLAYER,
+          attempt,
+          'Interpretation is unavailable. No time or resources were spent.'
+          ' Retry your wording or use an exact suggested command; nothing was'
+          ' committed.',
+          before,
+      )
+      self.state['history'][-1]['interpretation_failure'] = category
+      return result
+
   def resolve(self, intent, original=''):
     """Apply one validated attempt; impossible actions are free and explicit."""
     with self.lock:

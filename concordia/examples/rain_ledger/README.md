@@ -281,3 +281,13 @@ remains available. A successful appeal releases two evenings of clinic supplies,
 not every frozen claim, and pays no personal fee. Spending union support reduces
 what Silas can spend on guards and reopens his existing petition work. This is
 a bounded follow-up using existing state, not a new repeating income loop.
+
+### Interpretation failures
+
+An unavailable interpretation spends no fictional time or resources and clears
+any older proposal. Retry, or use an exact command shown by the scene. The action
+log and saved history retain a sanitized `interpretation_failure` category for
+diagnosis; they do not retain raw provider error bodies. Complete quoted/fenced
+choice values are supported by the standard Together adapter, but prose that
+merely mentions a command is rejected. Offline contract tests do not establish
+real-model comprehension; inferred actions still require review and confirmation.

@@ -297,3 +297,30 @@ of a natural payment proposal. 67 tests pass; types0errors/4existing suppression
 scoped lint and diff checks clean. These are rules/ASGI/mocked-provider checks,
 not an actual engine or human/model playtest. The city remains finite; this is
 one substantive continuation, not a claim of an indefinitely reactive campaign.
+
+## 2026-10-12: a failed interpretation must remain diagnosable and recoverable
+
+Human evidence: `Go to the cafe` produced both an interpretation-unavailable
+notice and an unclear-intent notice, while remaining at office/turn0/$18. The
+four-word phrase correctly took natural interpretation rather than the exact
+`go cafe` shortcut. The precise original exception was lost, so a provider,
+transport or response-format cause cannot be ranked from the retained evidence.
+
+Generic adapter review found strict matching in one model and unsafe substring
+matching in others. The shared complete-value decoder now tolerates lossless
+quoted/fenced/JSON choice wrappers and rejects ambiguous prose, negated choice
+mentions and duplicate keys. This repairs a demonstrated response-contract gap;
+it does not establish which failure occurred on the phone or prove semantics.
+
+PortAuthority now emits one recoverable failure. Ledger history and the final
+standard captured action log retain an allowlisted diagnostic category; raw
+exception text is not logged. A stale proposal is discarded, preventing a later
+confirmation from committing an unrelated earlier interpretation. Resources,
+location and fictional time remain unchanged.
+
+Evidence: 144 adapter fake-SDK tests and71 scenario tests (four new interpretation
+contract tests) pass. Canned replies cover travel paraphrases, questions, refusal,
+negation and unsupported multi-action input, original prompt preservation,
+mandatory review/cancel, bounded retries and sanitized save/restore. They are
+not held-out model accuracy results. Real protected-Together replay and mobile
+review/cancel behavior remain pending; no user save or live service was changed.

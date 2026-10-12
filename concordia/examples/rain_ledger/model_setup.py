@@ -42,3 +42,24 @@ def protected_together_model(model_name, credential=None):
       api_key=credential,
       client=cast(together_ai_model.TogetherClient, client),
   )
+
+
+def interpretation_failure_category(error):
+  """Return allowlisted categories, never provider payloads or exception text."""
+  from concordia.language_model import language_model
+
+  if isinstance(error, language_model.InvalidResponseError):
+    message = str(error)
+    for prefix, category in (
+        ('Together HTTP 401:', 'provider_authentication'),
+        ('Together HTTP 403:', 'provider_permission'),
+        ('Together HTTP 429:', 'provider_rate_limit'),
+        ('Together HTTP ', 'provider_request'),
+        ('Together transport/protocol:', 'provider_transport'),
+        ('Together returned no visible text:', 'empty_or_malformed_response'),
+        ('Together returned no valid choice ', 'choice_contract'),
+    ):
+      if message.startswith(prefix):
+        return category
+    return 'invalid_model_response'
+  return 'interpretation_exception'
