@@ -1,0 +1,455 @@
+# Copyright 2026 DeepMind Technologies Limited.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Original Rain Ledger scenario content; no licensed setting or rules."""
+
+from typing import NotRequired, TypedDict
+
+
+class EvidenceSpec(TypedDict):
+  place: str
+  source: str
+  text: str
+  credibility: int
+  kind: str
+  acquisition: NotRequired[str]
+  authenticated: NotRequired[bool]
+
+
+class JobSpec(TypedDict):
+  place: str
+  pay: int
+  description: str
+
+
+class ResidentSpec(TypedDict):
+  home: str
+  goal: str
+  knowledge: str
+  moves: list[str]
+  affordances: str
+  voice: str
+
+
+PLAYER = 'Rowan Vale'
+GM = 'Port Mercy'
+OPENING = """The envelope contains six dollars and a photograph of a woman repairing a clock.
+
+“Find my sister before the city finds her,” says Ada Saye. She has brought her own chair; you sold the spare last Thursday. Her sister Iona kept accounts for Harbour Mutual. Three streets in the Narrows have just been condemned. Iona has vanished with the inspection ledger.
+
+Outside your office, a tram conductor argues with a boy over a fare neither can afford. On your desk are two other offers: recover a dockworker's pawned tools, or photograph a councillor's midnight visitor. You have $18, a camera, a lock pick and an office paid through tomorrow. You have accepted nothing yet.
+
+Ada will wait at the Lantern café. You can follow her, take other work, or walk away. Nobody has bought your answer."""
+PLACES: dict[str, tuple[str, str, list[str]]] = {
+    'office': (
+        'Vale Investigations',
+        (
+            'Burnt coffee. The frosted door still bears your former partner’s'
+            ' name beneath yours.'
+        ),
+        ['cafe', 'docks', 'records'],
+    ),
+    'cafe': (
+        'The Lantern',
+        (
+            'Nessa turns the cups handle-first. Men who carry guns tend to'
+            ' notice small courtesies.'
+        ),
+        ['office', 'narrows', 'clinic'],
+    ),
+    'docks': (
+        'North Quay',
+        (
+            'A winch counts its teeth against a chain. The hiring chalkboard'
+            ' has more names than hooks.'
+        ),
+        ['office', 'warehouse', 'press'],
+    ),
+    'records': (
+        'Municipal Records',
+        (
+            'A green lamp makes every hand look ill. Carbon copies smell'
+            ' sweeter than the originals.'
+        ),
+        ['office', 'mutual'],
+    ),
+    'narrows': (
+        'The Narrows',
+        (
+            'Doorframes carry pencil marks recording children’s heights.'
+            ' Surveyors have chalked red crosses over them.'
+        ),
+        ['cafe', 'warehouse', 'clinic'],
+    ),
+    'warehouse': (
+        'Bond Store Nine',
+        (
+            'Rope, orange peel, river mud. A boarded counting window overlooks'
+            ' a locked desk.'
+        ),
+        ['docks', 'narrows'],
+    ),
+    'press': (
+        'The Evening Wire',
+        (
+            'Typesetters eat above the cases so crumbs fall between letters. An'
+            ' empty front page waits on a stone.'
+        ),
+        ['docks', 'mutual'],
+    ),
+    'mutual': (
+        'Harbour Mutual',
+        (
+            'The lobby clock runs four minutes fast. Claimants are always late;'
+            ' premiums never are.'
+        ),
+        ['records', 'press'],
+    ),
+    'clinic': (
+        'Saint Orra Clinic',
+        (
+            'Boiled linen hangs beside boxing gloves. Doctor Pell accepts'
+            ' money, labour, or an honest debt.'
+        ),
+        ['cafe', 'narrows'],
+    ),
+}
+CONTACTS: dict[str, tuple[str, str, str]] = {
+    'ada': (
+        'Ada Saye',
+        'cafe',
+        (
+            'A tram mechanic. Counts promises precisely. Wants Iona safe, even'
+            ' if the insurance case dies.'
+        ),
+    ),
+    'nessa': (
+        'Nessa Rook',
+        'cafe',
+        (
+            'Café proprietor and neighbourhood organiser. Hospitality is a'
+            ' decision, never a reflex. Needs safe homes, fears a panic.'
+        ),
+    ),
+    'silas': (
+        'Silas Marr',
+        'docks',
+        (
+            'Union dispatcher. Short sentences, dry humour. Wants wages'
+            ' restored and the loading crews kept together.'
+        ),
+    ),
+    'vera': (
+        'Vera Quill',
+        'press',
+        (
+            'Reporter. Asks for dates before adjectives. Wants a defensible'
+            ' story and refuses to print unsupported accusations.'
+        ),
+    ),
+    'holt': (
+        'Edwin Holt',
+        'mutual',
+        (
+            'Mutual assessor. Polite complete sentences. Makes appointments'
+            ' in pencil and keeps the carbon copies within reach.'
+        ),
+    ),
+    'pell': (
+        'Doctor Pell',
+        'clinic',
+        (
+            'Tired, direct, kind without softness. Protects patients and keeps'
+            ' their names off police forms.'
+        ),
+    ),
+    'iona': (
+        'Iona Saye',
+        'warehouse',
+        (
+            'Bookkeeper. Speaks in corrections. Repairs clocks while she works.'
+            ' You have yet to hear her own account.'
+        ),
+    ),
+}
+EVIDENCE: dict[str, EvidenceSpec] = {
+    'permit': {
+        'place': 'records',
+        'source': 'Municipal duplicate register, folio 81',
+        'text': (
+            'Demolition permits were dated eleven days before the structural'
+            ' survey.'
+        ),
+        'credibility': 2,
+        'kind': 'document',
+    },
+    'ledger': {
+        'place': 'warehouse',
+        'source': 'Iona’s original counter-ledger',
+        'text': (
+            'Harbour Mutual insured vacant properties as occupied, then'
+            ' borrowed against the inflated premiums.'
+        ),
+        'credibility': 3,
+        'kind': 'document',
+    },
+    'testimony': {
+        'place': 'cafe',
+        'source': 'Ada’s signed account of Iona’s last visit',
+        'text': (
+            'Iona named the inspection office and left a duplicate policy'
+            ' number: 4407.'
+        ),
+        'credibility': 1,
+        'kind': 'witness',
+    },
+    'carbon': {
+        'place': 'mutual',
+        'source': 'Holt’s carbon of policy 4407',
+        'text': (
+            'Director Creel authorised the demolition rider; Holt countersigned'
+            ' under a personal guarantee.'
+        ),
+        'credibility': 2,
+        'kind': 'document',
+    },
+    'manifest': {
+        'place': 'docks',
+        'source': 'Union loading tally signed by two stevedores',
+        'text': (
+            'Demolition charges were unloaded before the neighbourhood was'
+            ' declared unsafe.'
+        ),
+        'credibility': 2,
+        'kind': 'document',
+    },
+}
+# Scenario access routes shared by suggestions and authoritative resolution.
+EVIDENCE_METHODS = {
+    'permit': ('careful',),
+    'testimony': ('careful',),
+    'ledger': ('careful', 'stealth', 'force'),
+    'manifest': ('careful', 'pay', 'stealth', 'force'),
+    'carbon': ('careful', 'bargain', 'stealth', 'force'),
+}
+
+JOBS: dict[str, JobSpec] = {
+    'hearing': {
+        'place': 'docks',
+        'pay': 0,
+        'description': (
+            'Bring the clinic delivery receipts to a public claims appeal.'
+        ),
+    },
+    'tools': {
+        'place': 'docks',
+        'pay': 12,
+        'description': (
+            'Get Silas’s crew tools released from the pawn cage. Negotiate a'
+            ' union guarantee, pay $5, or steal them.'
+        ),
+    },
+    'photograph': {
+        'place': 'mutual',
+        'pay': 20,
+        'description': (
+            'Photograph the councillor’s visitor. A patient’s family is meeting'
+            ' him for medicine vouchers. Sell the photograph, warn them, or'
+            ' return an empty envelope.'
+        ),
+    },
+    'medicine': {
+        'place': 'clinic',
+        'pay': 9,
+        'description': (
+            'Deliver refrigerated medicine through the Narrows. Earn cash or'
+            ' ask Pell to treat an injury instead.'
+        ),
+    },
+}
+# These become visible only after the investigator has inspected the job.
+JOB_METHODS = {
+    'hearing': ('pay', 'bargain'),
+    'tools': ('pay', 'bargain', 'stealth', 'force'),
+    'photograph': ('sell', 'warn'),
+    'medicine': ('careful',),
+}
+JOB_PROGRESS = {
+    'hearing': {
+        'decision': (
+            'Pell’s signed delivery receipt supports a narrow clinic appeal.'
+            ' Pay $6 for transport, or spend two union support on volunteer'
+            ' transport. Either releases two evenings of clinic supplies, pays'
+            ' you nothing and leaves other claims frozen. Choose job hearing'
+            ' pay or bargain; refuse hearing declines without paying for'
+            ' transport.'
+        ),
+        'complete:pay': (
+            'You funded the clinic appeal. Its supply claim was released; other'
+            ' claims remain frozen.'
+        ),
+        'complete:bargain': (
+            'The crews funded the clinic appeal with two union support. Its'
+            ' supply claim was released; other claims remain frozen.'
+        ),
+        'complete:declined': (
+            'You declined the clinic appeal. No resources were spent and no'
+            ' claim was released.'
+        ),
+    },
+    'tools': {
+        'complete:declined': (
+            'You declined the commission; no fee or union guarantee was earned.'
+            ' Silas still offers paid access to the tally at the docks.'
+        ),
+        'complete:pay': 'You paid to recover the tools and collected the fee.',
+        'complete:bargain': (
+            'The tools were recovered against a crew medicine guarantee.'
+            ' Check obligations for any delivery still owed.'
+        ),
+        'complete:stealth': (
+            'You recovered the tools by theft and collected the fee.'
+            ' Silas now trusts you with the tally.'
+        ),
+        'complete:force': (
+            'You forced the cage and returned the tools for the fee.'
+            ' The violence remains part of your record.'
+        ),
+        'decision': (
+            'The tools are in the pawn cage. At the docks, pay $5, pledge a'
+            ' later medicine delivery, or risk theft/force. You can also refuse'
+            ' the job.'
+        ),
+    },
+    'photograph': {
+        'complete:declined': (
+            'You declined to sell or warn; no fee was collected and the'
+            ' photograph was not circulated by you.'
+        ),
+        'complete:sell': (
+            'You sold the photograph. Its exposure of the patient’s family'
+            ' remains, even if you repair your working relationship with Pell.'
+        ),
+        'complete:warn': (
+            'You warned the family and accepted the smaller fee, keeping'
+            ' their visit out of circulation.'
+        ),
+        'decision': (
+            'The visitor is a patient’s relative seeking medicine. At Mutual,'
+            ' sell the photograph for $20, warn the family for $4, or refuse'
+            ' without a fee. Nothing has been circulated yet.'
+        ),
+    },
+    'medicine': {
+        'complete:declined': (
+            'You returned the sealed case to Pell without a fee.'
+            ' For other paid clinic work, ask with help pell.'
+        ),
+        'complete:delivered': (
+            'The Narrows nurse signed for this consignment; its fee is paid.'
+            ' For ongoing paid clinic work, ask with help pell.'
+        ),
+        'carrying': (
+            'The sealed cold case is with you. Deliver medicine in the Narrows'
+            ' for $9, or return it to Pell at the clinic to decline. Reading or'
+            ' disconnecting does not spoil it.'
+        ),
+    },
+}
+
+# Local service knowledge for spoken answers, not undiscovered case truth.
+CONVERSATION_SERVICES = {
+    'ada': (
+        'Your priority is Iona’s safety. A relocation agreement does not'
+        ' require ending the search or surrendering evidence. No settlement'
+        ' terms have been accepted merely by discussing them. Do not invent'
+        ' conditions.'
+    ),
+    'nessa': (
+        'A $3 food parcel delivered in the Narrows supplies one evening.'
+        ' Tenant organising costs time, not cash. Two verified representatives'
+        ' and a public stay allow negotiation of six evenings of company relief'
+        ' instead of relocation bonds. Donations do not buy rent, repairs,'
+        ' solicitors or a demolition stay. Do not offer those services.'
+    ),
+    'pell': (
+        'You offer treatment and delivery work. Respect any recorded refusal'
+        ' of new paid work. Repair restores working access, not privacy or the'
+        ' erasure of a circulated photograph. Never invent a medical diagnosis.'
+    ),
+    'holt': (
+        'Discussion signs nothing. A signed agreement uses one company'
+        ' allocation; relocation, personal consultancy and emergency relief'
+        ' are alternatives. It does not seize papers or force anyone to move.'
+    ),
+}
+
+NPCS: dict[str, ResidentSpec] = {
+    'Nessa Rook': {
+        'home': 'cafe',
+        'goal': (
+            'Keep the Narrows housed without frightening families into the'
+            ' street.'
+        ),
+        'knowledge': (
+            'Condemnation notices have arrived. Ada asks after her sister. You'
+            ' know nothing about insurance accounts.'
+        ),
+        'moves': ['organise', 'shelter'],
+        'affordances': (
+            'organise adds one verified block representative to the tenants'
+            ' petition, up to three. Two representatives can administer company'
+            ' emergency relief after a public stay, instead of relocation'
+            ' bonds; shelter opens two beds above your cafe, up to eight.'
+            ' Families need both an immediate place to sleep and a collective'
+            ' claim. Wait if your work is already sufficient.'
+        ),
+        'voice': 'Practical, warm, refuses grand speeches.',
+    },
+    'Silas Marr': {
+        'home': 'docks',
+        'goal': 'Secure crew wages and keep the union independent.',
+        'knowledge': (
+            'Charges arrived before the survey. You signed the loading tally.'
+            ' You concealed one unsafe shift.'
+        ),
+        'moves': ['petition', 'guard'],
+        'affordances': (
+            'petition publicly offers certified tally access and builds union'
+            ' support up to three; guard spends one support to move guard'
+            ' attention away from Mutual. You know the tally dates matter;'
+            ' guard is useful when witnesses need space.'
+        ),
+        'voice': 'Dry humour, brief sentences, concrete prices.',
+    },
+    'Edwin Holt': {
+        'home': 'mutual',
+        'goal': (
+            'Keep your pension and your husband’s treatment; avoid mass'
+            ' evictions if possible.'
+        ),
+        'knowledge': (
+            'You countersigned policy4407. Creel ordered inflated valuations. A'
+            ' missing bookkeeper may expose your guarantee.'
+        ),
+        'moves': ['audit', 'offer'],
+        'affordances': (
+            'audit tightens office security up to three and makes covert'
+            ' copying risky from level two; offer publicly opens relocation'
+            ' negotiations to holders of a documented source. You can preserve'
+            ' your position while choosing whether to obstruct or negotiate.'
+        ),
+        'voice': 'Courteous, cautious, speaks in complete sentences.',
+    },
+}
