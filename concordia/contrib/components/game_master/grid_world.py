@@ -59,6 +59,9 @@ SEED_BANK = 0.1
 
 Tile = tuple[int, int]
 
+# The key a game master registers its grid world under, by convention.
+DEFAULT_GRID_WORLD_COMPONENT_KEY = '__grid_world__'
+
 
 class Grid:
   """Terrain and food on a toroidal grid (not thread-safe: see `GridWorld`)."""
@@ -83,7 +86,8 @@ class Grid:
       richness: Scales every tile's capacity.
       regrowth: The logistic rate food regrows by in a step.
       seed_bank: The share of its capacity even a bare tile regrows.
-      capacity: The food a tile of each terrain kind carries at most.
+      capacity: The food a tile of each terrain kind carries at most; every
+        kind in `TERRAIN` must have one.
       ridges: Lines of hills from edge to edge, each at column `col`,
         `width` columns wide (2 by default), with a pass of grass at rows
         `gap` (first and last), if any. The map wraps, so two ridges part
@@ -93,6 +97,9 @@ class Grid:
     self.richness = float(richness)
     self.regrowth = float(regrowth)
     self.seed_bank = float(seed_bank)
+    missing = sorted(set(TERRAIN) - set(capacity))
+    if missing:
+      raise ValueError(f'No capacity for terrain: {", ".join(missing)}.')
     self._capacity = {kind: float(capacity[kind]) for kind in TERRAIN}
     rng = np.random.default_rng([seed, 1])
     # A smooth random field picks the terrain: rivers in its valleys, hills
@@ -204,15 +211,24 @@ class Grid:
     return taken
 
   def regrow(self, season: float = 1.0) -> None:
-    """Food grows back, `season` times as much as in a usual step."""
+    """Food grows back, `season` times as much as in a usual step.
+
+    A tile that carries nothing (no capacity) stays bare.
+
+    Args:
+      season: How much of a usual step's regrowth this step brings.
+    """
     capacity = self.capacities()
+    full = np.divide(
+        self.food, capacity, out=np.ones_like(capacity), where=capacity > 0
+    )
     self.food += season * (
-        self.regrowth * self.food * (1.0 - self.food / capacity)
-        + self.seed_bank * capacity
+        self.regrowth * self.food * (1.0 - full) + self.seed_bank * capacity
     )
     np.minimum(self.food, capacity, out=self.food)
 
   def get_state(self) -> dict[str, Any]:
+    """The terrain and food, as plain data (the settings are not saved)."""
     return {
         'rows': self.rows,
         'cols': self.cols,

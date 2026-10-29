@@ -15,7 +15,10 @@
 """Tests for the grid world."""
 
 from absl.testing import absltest
+from concordia.agents import entity_agent_with_logging
+from concordia.components.agent import concat_act_component
 from concordia.contrib.components.game_master import grid_world
+from concordia.language_model import no_language_model
 from concordia.typing import entity as entity_lib
 import numpy as np
 
@@ -81,6 +84,23 @@ class GridTest(absltest.TestCase):
       good.regrow()
     np.testing.assert_allclose(good.food, capacity)  # Never beyond it.
 
+  def test_bare_land_stays_bare_and_every_kind_needs_a_capacity(self):
+    grid = grid_world.Grid(
+        4, 4, seed=0, capacity={**grid_world.CAPACITY, 'grass': 0.0}
+    )
+    grid.regrow()
+
+    self.assertFalse(np.isnan(grid.food).any())
+    with self.assertRaisesRegex(ValueError, 'No capacity for terrain: marsh'):
+      grid_world.Grid(
+          4,
+          4,
+          seed=0,
+          capacity={
+              k: v for k, v in grid_world.CAPACITY.items() if k != 'marsh'
+          },
+      )
+
   def test_a_mover_finds_the_best_land_near(self):
     grid = grid_world.Grid(10, 10, seed=0)
     grid.food[:] = 0.0
@@ -93,13 +113,34 @@ class GridTest(absltest.TestCase):
 class GridWorldTest(absltest.TestCase):
 
   def test_the_grid_is_saved_and_restored_with_its_game_master(self):
-    world = grid_world.GridWorld(grid_world.Grid(6, 8, seed=1))
+    def game_master(seed):
+      return entity_agent_with_logging.EntityAgentWithLogging(
+          agent_name='Land',
+          act_component=concat_act_component.ConcatActComponent(
+              model=no_language_model.NoLanguageModel()
+          ),
+          context_components={
+              grid_world.DEFAULT_GRID_WORLD_COMPONENT_KEY: grid_world.GridWorld(
+                  grid_world.Grid(6, 8, seed=seed)
+              )
+          },
+      )
+
+    def world_of(gm):
+      return gm.get_component(
+          grid_world.DEFAULT_GRID_WORLD_COMPONENT_KEY,
+          type_=grid_world.GridWorld,
+      )
+
+    gm = game_master(seed=1)
+    world = world_of(gm)
     with world.lock:
       world.grid.harvest((3, 3), effort=4.0)
     state = world.get_state()
 
-    restored = grid_world.GridWorld(grid_world.Grid(6, 8, seed=2))
-    restored.set_state(state)
+    again = game_master(seed=2)
+    again.set_state(gm.get_state())
+    restored = world_of(again)
 
     np.testing.assert_array_equal(restored.grid.terrain, world.grid.terrain)
     np.testing.assert_array_equal(restored.grid.food, world.grid.food)
